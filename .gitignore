@@ -1,0 +1,41 @@
+# Data (too large for git — host on Google Drive / HuggingFace)
+data/
+*.pkl
+
+# Model checkpoints
+checkpoints/
+*.pth
+
+# Output / results
+output/
+results/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+.eggs/
+*.egg
+
+# Jupyter
+.ipynb_checkpoints/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Claude Code
+.claude/
+
+# Working files
+*.docx
+*.png
+*.txt
+!requirements.txt
+!README.md
