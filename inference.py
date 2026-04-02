@@ -220,6 +220,30 @@ def save_visualisation(
 # Main evaluation loop
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _save_checkpoint(rows, class_iou_accum, out_dir, total, t_start):
+    """Save intermediate CSVs after each batch."""
+    df = pd.DataFrame(rows)
+    df.to_csv(out_dir / "per_image.csv", index=False)
+
+    numeric_cols = df.select_dtypes(include=[np.number]).columns
+    df_summary = df[numeric_cols].mean().to_frame("mean").T
+    df_summary.to_csv(out_dir / "summary.csv", index=False)
+
+    if class_iou_accum:
+        df_all_class = pd.concat(class_iou_accum, ignore_index=True)
+        df_class_avg = (
+            df_all_class
+            .groupby(["class_id", "class_name"])
+            .agg({"iou": "mean", "precision": "mean", "recall": "mean", "support": "sum"})
+            .reset_index()
+            .sort_values("class_id")
+        )
+        df_class_avg.to_csv(out_dir / "class_iou.csv", index=False)
+
+    elapsed = time.time() - t_start
+    print(f"  [saved] {len(rows)}/{total} images → {out_dir / 'per_image.csv'}  ({elapsed:.0f}s)")
+
+
 def run_evaluation(args):
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     print(f"[init] Device: {device}")
@@ -251,10 +275,25 @@ def run_evaluation(args):
     # accumulators
     rows = []
     class_iou_accum = []
+    batch_size = args.batch_save
+
+    # resume support: load existing per_image.csv if present
+    per_image_path = out_dir / "per_image.csv"
+    done_stems = set()
+    if per_image_path.exists():
+        df_existing = pd.read_csv(per_image_path)
+        rows = df_existing.to_dict("records")
+        done_stems = set(df_existing["stem"].astype(str))
+        print(f"[resume] Found {len(done_stems)} already-processed images, resuming...")
 
     t_start = time.time()
+    batch_count = 0
 
     for i, stem in enumerate(stems):
+        # skip already-processed images (resume support)
+        if stem in done_stems:
+            continue
+
         img_path  = img_dir  / f"{stem}.png"
         mask_path = mask_dir / f"{stem}_mask.png"
 
@@ -328,6 +367,7 @@ def run_evaluation(args):
             "n_edges_pred":   G_pred.number_of_edges(),
             "n_edges_gt":     G_gt.number_of_edges(),
         })
+        batch_count += 1
 
         # --- visualisation ---
         if i < args.save_vis:
@@ -338,13 +378,17 @@ def run_evaluation(args):
             )
 
         # progress
-        if (i + 1) % 50 == 0 or (i + 1) == len(stems):
+        if batch_count % 50 == 0 or (i + 1) == len(stems):
             elapsed = time.time() - t_start
-            print(f"  [{i+1:>5}/{len(stems)}]  mIoU={miou:.4f}  "
+            print(f"  [{len(rows):>5}/{len(stems)}]  mIoU={miou:.4f}  "
                   f"edge_f1={e['edge_f1']}  ged={ged:.0f}  "
                   f"({elapsed:.0f}s)")
 
-    # ── save results ──────────────────────────────────────────────────────────
+        # --- save after every batch_size images ---
+        if batch_count % batch_size == 0:
+            _save_checkpoint(rows, class_iou_accum, out_dir, len(stems), t_start)
+
+    # ── final save ────────────────────────────────────────────────────────────
     df_per_image = pd.DataFrame(rows)
     df_per_image.to_csv(out_dir / "per_image.csv", index=False)
 
@@ -409,8 +453,12 @@ def parse_args():
         help="Number of sample visualisations to save (0 to disable)",
     )
     parser.add_argument(
-        "--ged-timeout", type=float, default=10.0,
+        "--ged-timeout", type=float, default=2.0,
         help="Seconds to spend on GED per image (lower = faster but less accurate)",
+    )
+    parser.add_argument(
+        "--batch-save", type=int, default=300,
+        help="Save intermediate CSVs every N images (default: 300)",
     )
     return parser.parse_args()
 
