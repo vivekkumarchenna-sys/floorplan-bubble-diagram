@@ -20,6 +20,8 @@ Floor Plan Image  →  Semantic Segmentation  →  Room Graph  →  Bubble Diagr
 | 8 | `evaluate.py` | Evaluation metrics (mIoU, edge F1, GED, Frobenius) |
 | 9 | `inference.py` | Batch evaluation on test set with GT comparison |
 | 10 | `generate_bubble.py` | End-to-end: image → bubble diagram |
+| 11 | `run_ablation.py` | Automated 6-variant ablation study |
+| 12 | `fig_ablation.py` | Publication-quality ablation bar chart |
 
 ## Segmentation Classes
 
@@ -140,7 +142,22 @@ python inference.py --save-vis 20
 python inference.py --ged-timeout 5
 ```
 
-Outputs per-image CSV, summary stats, and per-class IoU to `results/eval_<timestamp>/`.
+Inference supports batch checkpointing (saves every 300 images) and resume on crash. Outputs per-image CSV, summary stats, and per-class IoU to `results/eval_<timestamp>/`.
+
+### Ablation Study
+
+```bash
+# run all 6 variants (default: 300 images per variant)
+python run_ablation.py
+
+# fewer images for speed
+python run_ablation.py --limit 100 --ged-timeout 2
+
+# all test images
+python run_ablation.py --limit 0
+```
+
+Outputs `results/ablation/ablation_results.csv` and `fig4_ablation.pdf`.
 
 ## Evaluation Metrics
 
@@ -167,8 +184,24 @@ Trained SegFormer-B3 on ResPlan dataset (17,107 floor plans):
 | Metric | Value |
 |--------|-------|
 | val mIoU | 0.965 |
-| test mIoU | 0.999 |
+| test mIoU | 0.998 |
+| Edge F1 | 0.696 |
 | Converged at | Epoch 23 |
+
+### Ablation Results
+
+| Variant | mIoU | Edge F1 | GED | Frobenius |
+|---------|------|---------|-----|-----------|
+| Full pipeline | 0.9978 | 0.6956 | 3.54 | 0.4415 |
+| w/o door edges | 0.9978 | 0.6956 | 12.72 | 0.4957 |
+| w/o room types | 0.9978 | 0.0000 | 11.94 | 0.4415 |
+| w/o corridor adj. | 0.9978 | 0.6888 | 3.66 | 0.4443 |
+| w/o post-processing | 0.9978 | 0.0000 | 12.46 | 0.6112 |
+| w/o edge typing | 0.9978 | 0.6956 | 12.74 | 0.6120 |
+
+Key findings: room type classification and dilation-based post-processing are critical components — removing either drops Edge F1 to zero.
+
+![Ablation Bar Chart](fig4_ablation.pdf)
 
 ## Project Structure
 
@@ -184,6 +217,9 @@ floorplan-bubble-diagram/
   evaluate.py           # Evaluation metrics
   inference.py          # Batch test-set evaluation
   generate_bubble.py    # End-to-end bubble diagram generator
+  run_ablation.py       # Automated ablation study (6 variants)
+  fig_ablation.py       # Ablation bar chart generator
+  fig4_ablation.pdf     # Ablation results chart
   requirements.txt
   LICENSE
   README.md
