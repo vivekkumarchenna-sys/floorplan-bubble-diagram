@@ -22,6 +22,10 @@ Floor Plan Image  →  Semantic Segmentation  →  Room Graph  →  Bubble Diagr
 | 10 | `generate_bubble.py` | End-to-end: image → bubble diagram |
 | 11 | `run_ablation.py` | Automated 6-variant ablation study |
 | 12 | `fig_ablation.py` | Publication-quality ablation bar chart |
+| 13 | `fig_training.py` | Training/validation loss and mIoU curves |
+| 14 | `fig_heatmap.py` | Proximity matrix heatmaps (GT vs Pred) |
+| 15 | `fig_qualitative.py` | Qualitative pipeline panel (3 rows x 7 cols) |
+| 16 | `fig_failures.py` | Failure case analysis (worst edge F1 samples) |
 
 ## Segmentation Classes
 
@@ -201,7 +205,26 @@ Trained SegFormer-B3 on ResPlan dataset (17,107 floor plans):
 
 Key findings: room type classification and dilation-based post-processing are critical components — removing either drops Edge F1 to zero.
 
-![Ablation Bar Chart](fig4_ablation.pdf)
+### Paper Figures
+
+All figures are generated via Python scripts and saved as 300 DPI PDFs:
+
+| Figure | File | Script | Description |
+|--------|------|--------|-------------|
+| Fig 2 | `fig2_loss.pdf` | `fig_training.py` | Training vs validation loss curve |
+| Fig 3 | `fig3_miou.pdf` | `fig_training.py` | Training vs validation mIoU curve |
+| Fig 4 | `fig4_ablation.pdf` | `fig_ablation.py` | Ablation bar chart (Edge F1 + mIoU) |
+| Fig 5 | `fig5_heatmap.pdf` | `fig_heatmap.py` | Proximity matrix heatmaps (GT vs Pred) |
+| Fig 6 | `fig6_qualitative.pdf` | `fig_qualitative.py` | Qualitative pipeline panel (3 rows x 7 cols) |
+| Fig 7 | `fig7_failures.pdf` | `fig_failures.py` | Failure cases with error annotation |
+
+```bash
+# generate all figures (Fig 2 & 3 need no GPU)
+python fig_training.py
+python fig_heatmap.py
+python fig_qualitative.py
+python fig_failures.py
+```
 
 ## Project Structure
 
@@ -219,7 +242,16 @@ floorplan-bubble-diagram/
   generate_bubble.py    # End-to-end bubble diagram generator
   run_ablation.py       # Automated ablation study (6 variants)
   fig_ablation.py       # Ablation bar chart generator
-  fig4_ablation.pdf     # Ablation results chart
+  fig_training.py       # Loss and mIoU curve plots
+  fig_heatmap.py        # Proximity matrix heatmap comparison
+  fig_qualitative.py    # Qualitative pipeline panel
+  fig_failures.py       # Failure case analysis
+  fig2_loss.pdf         # Training vs validation loss
+  fig3_miou.pdf         # Training vs validation mIoU
+  fig4_ablation.pdf     # Ablation bar chart
+  fig5_heatmap.pdf      # Proximity matrix heatmaps
+  fig6_qualitative.pdf  # Qualitative results panel
+  fig7_failures.pdf     # Failure case analysis
   requirements.txt
   LICENSE
   README.md

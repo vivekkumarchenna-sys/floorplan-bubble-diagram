@@ -258,6 +258,8 @@ def run_evaluation(args):
         raise FileNotFoundError(f"Test split not found: {split_file}")
 
     stems = [l.strip() for l in split_file.read_text().splitlines() if l.strip()]
+    if args.limit > 0:
+        stems = stems[:args.limit]
     print(f"[data] Test samples: {len(stems)}")
 
     # output directory
@@ -459,6 +461,10 @@ def parse_args():
     parser.add_argument(
         "--batch-save", type=int, default=300,
         help="Save intermediate CSVs every N images (default: 300)",
+    )
+    parser.add_argument(
+        "--limit", type=int, default=0,
+        help="Max test images to process (0 = all)",
     )
     return parser.parse_args()
 
