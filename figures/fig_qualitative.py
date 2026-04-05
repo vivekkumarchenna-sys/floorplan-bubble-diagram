@@ -22,6 +22,8 @@ except NameError:
 
 sys.path.insert(0, str(_SCRIPT_DIR))
 
+import json
+
 import cv2
 import numpy as np
 import pandas as pd
@@ -83,9 +85,18 @@ def _mini_heatmap(ax, matrix, labels):
     ax.set_yticklabels([l.split("[")[0][:6] for l in labels], fontsize=5)
 
 
+def _load_pixel_scale(root):
+    path = root / "pixel_scale.json"
+    if path.exists():
+        with open(path) as f:
+            return json.load(f)
+    return {}
+
+
 def generate_panel(stems, model, device, root, save_path):
     img_dir  = root / "data" / "resplan_raster"
     mask_dir = root / "data" / "resplan_masks"
+    pixel_scale_map = _load_pixel_scale(root)
 
     n_rows = len(stems)
     n_cols = 7
@@ -109,12 +120,17 @@ def generate_panel(stems, model, device, root, save_path):
 
         # graphs
         try:
-            G_pred = build_graph_from_segmentation(pred_mask)
+            scale = pixel_scale_map.get(str(stem))
+            G_pred = build_graph_from_segmentation(pred_mask, pixel_scale=scale)
         except Exception:
             import networkx as nx
             G_pred = nx.Graph()
         try:
             G_gt = build_gt_graph_from_polygons(mask_to_plan_dict(gt_mask))
+            if scale is not None:
+                for nid in G_gt.nodes():
+                    area_px = G_gt.nodes[nid].get("area", 0)
+                    G_gt.nodes[nid]["area_sqm"] = round(area_px * scale, 2)
         except Exception:
             import networkx as nx
             G_gt = nx.Graph()

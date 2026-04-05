@@ -39,3 +39,9 @@ Thumbs.db
 *.txt
 !requirements.txt
 !README.md
+!data/splits/*.txt
+!checkpoints/README.md
+!data/README.md
+
+# Conversation logs
+2026-*.txt

@@ -1,0 +1,17 @@
+cff-version: 1.2.0
+title: "Automated Bubble Diagram Extraction from Architectural Floor Plans"
+type: software
+authors:
+  - family-names: Chenna
+    given-names: Vivek Kumar
+  - family-names: Dev
+    given-names: Adhithya
+message: "If you use this software, please cite the associated paper."
+repository-code: "https://github.com/vivekkumarchenna-sys/floorplan-bubble-diagram"
+license: MIT
+keywords:
+  - floor-plan
+  - bubble-diagram
+  - semantic-segmentation
+  - graph-extraction
+  - SegFormer

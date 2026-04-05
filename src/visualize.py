@@ -142,8 +142,12 @@ def draw_bubble_diagram(
     node_labels = {}
     for nid in G.nodes():
         name = G.nodes[nid]["class_name"]
-        area = G.nodes[nid].get("area_px", G.nodes[nid].get("area", 0))
-        node_labels[nid] = f"{name}\n{area:.0f}px²"
+        if "area_sqm" in G.nodes[nid]:
+            area_sqm = G.nodes[nid]["area_sqm"]
+            node_labels[nid] = f"{name}\n{area_sqm:.1f} m²"
+        else:
+            area = G.nodes[nid].get("area_px", G.nodes[nid].get("area", 0))
+            node_labels[nid] = f"{name}\n{area:.0f}px²"
 
     # ── draw edges (grouped by type for consistent style) ────────────────────
     for edge_type, style in EDGE_STYLES.items():

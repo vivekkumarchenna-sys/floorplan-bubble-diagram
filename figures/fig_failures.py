@@ -24,6 +24,8 @@ except NameError:
 
 sys.path.insert(0, str(_SCRIPT_DIR))
 
+import json
+
 import cv2
 import numpy as np
 import pandas as pd
@@ -69,9 +71,18 @@ def _mask_to_rgb(mask):
     return _PALETTE[mask.clip(0, NUM_CLASSES - 1)]
 
 
+def _load_pixel_scale(root):
+    path = root / "pixel_scale.json"
+    if path.exists():
+        with open(path) as f:
+            return json.load(f)
+    return {}
+
+
 def generate_failures(df_worst, model, device, root, save_path):
     img_dir  = root / "data" / "resplan_raster"
     mask_dir = root / "data" / "resplan_masks"
+    pixel_scale_map = _load_pixel_scale(root)
 
     n_rows = len(df_worst)
     n_cols = 6
@@ -94,13 +105,18 @@ def generate_failures(df_worst, model, device, root, save_path):
 
         img_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
 
+        scale = pixel_scale_map.get(stem)
         try:
-            G_pred = build_graph_from_segmentation(pred_mask)
+            G_pred = build_graph_from_segmentation(pred_mask, pixel_scale=scale)
         except Exception:
             import networkx as nx
             G_pred = nx.Graph()
         try:
             G_gt = build_gt_graph_from_polygons(mask_to_plan_dict(gt_mask))
+            if scale is not None:
+                for nid in G_gt.nodes():
+                    area_px = G_gt.nodes[nid].get("area", 0)
+                    G_gt.nodes[nid]["area_sqm"] = round(area_px * scale, 2)
         except Exception:
             import networkx as nx
             G_gt = nx.Graph()

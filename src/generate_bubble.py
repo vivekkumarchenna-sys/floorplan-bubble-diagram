@@ -33,6 +33,8 @@ except NameError:
 
 sys.path.insert(0, str(_SCRIPT_DIR))
 
+import json
+
 import cv2
 import numpy as np
 import torch
@@ -63,13 +65,13 @@ _IMG_EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
 
 # Mask overlay palette (class_id → RGB)
 _PALETTE = np.zeros((NUM_CLASSES, 3), dtype=np.uint8)
-_PALETTE[1]  = (100, 200, 100)   # Living
-_PALETTE[2]  = (132, 199, 129)   # Bedroom
-_PALETTE[3]  = (100, 150, 200)   # Bathroom
-_PALETTE[4]  = (255, 138, 101)   # Kitchen
+_PALETTE[1]  = (100, 200, 100)   # Bedroom
+_PALETTE[2]  = (132, 199, 129)   # Bathroom
+_PALETTE[3]  = (100, 150, 200)   # Kitchen
+_PALETTE[4]  = (255, 138, 101)   # Living
 _PALETTE[5]  = (140, 220, 180)   # Balcony
 _PALETTE[6]  = (200, 200, 200)   # Storage
-_PALETTE[7]  = (220, 180, 140)   # Dining
+_PALETTE[7]  = (220, 180, 140)   # Stair
 _PALETTE[8]  = (180, 180, 180)   # Parking
 _PALETTE[9]  = (140, 180, 220)   # Pool
 _PALETTE[10] = (80,  80,  80)    # Wall
@@ -85,11 +87,13 @@ _PALETTE[13] = (255, 140, 0)     # FrontDoor
 class BubbleGenerator:
     """Load model once, generate bubble diagrams for any number of images."""
 
-    def __init__(self, ckpt_path: str | Path, device: str | None = None):
+    def __init__(self, ckpt_path: str | Path, device: str | None = None,
+                 pixel_scale_path: str | Path | None = None):
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = torch.device(device)
         self.model = self._load_model(ckpt_path)
+        self.pixel_scale_map = self._load_pixel_scale(pixel_scale_path)
 
     def _load_model(self, ckpt_path: str | Path) -> SegformerForSemanticSegmentation:
         ckpt_path = Path(ckpt_path)
@@ -114,6 +118,24 @@ class BubbleGenerator:
         miou  = ckpt.get("val_mIoU", "?")
         print(f"[model] Loaded: epoch={epoch}  val_mIoU={miou}  device={self.device}")
         return model
+
+    @staticmethod
+    def _load_pixel_scale(path: str | Path | None) -> dict[str, float] | None:
+        if path is None:
+            # try default location
+            default = _SCRIPT_DIR / "pixel_scale.json"
+            if default.exists():
+                path = default
+            else:
+                return None
+        path = Path(path)
+        if not path.exists():
+            print(f"[warn] pixel_scale.json not found at {path}, areas will be in pixels")
+            return None
+        with open(path) as f:
+            data = json.load(f)
+        print(f"[scale] Loaded pixel_scale.json ({len(data)} entries)")
+        return data
 
     @torch.no_grad()
     def segment(self, image_bgr: np.ndarray) -> np.ndarray:
@@ -150,8 +172,12 @@ class BubbleGenerator:
         # segment
         mask = self.segment(image_bgr)
 
-        # build graph
-        G = build_graph_from_segmentation(mask)
+        # build graph (with area in sq meters if scale is available)
+        stem = image_path.stem
+        scale = None
+        if self.pixel_scale_map is not None:
+            scale = self.pixel_scale_map.get(stem)
+        G = build_graph_from_segmentation(mask, pixel_scale=scale)
 
         # proximity matrix
         if G.number_of_nodes() > 0:
@@ -235,12 +261,16 @@ def main():
         "--limit", type=int, default=0,
         help="Max images to process from a folder (0 = all)",
     )
+    parser.add_argument(
+        "--pixel-scale", type=str, default=None,
+        help="Path to pixel_scale.json for area in sq meters (auto-detected if in project root)",
+    )
     args = parser.parse_args()
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    gen = BubbleGenerator(args.ckpt)
+    gen = BubbleGenerator(args.ckpt, pixel_scale_path=args.pixel_scale)
 
     # single image or folder
     image_path = Path(args.image)

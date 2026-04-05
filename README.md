@@ -10,22 +10,20 @@ Floor Plan Image  →  Semantic Segmentation  →  Room Graph  →  Bubble Diagr
 
 | Step | Script | Description |
 |------|--------|-------------|
-| 1 | `dataset.py` | PyTorch dataset with albumentations augmentation |
-| 2 | `train.py` | SegFormer-B3 training (16-class semantic segmentation) |
-| 3 | `train_deeplab.py` | DeepLabV3+ alternative training script |
-| 4 | `build_graph.py` | Extract room-adjacency graph from segmentation mask |
-| 5 | `build_gt_graph.py` | Ground-truth graph from polygon data (Shapely) |
-| 6 | `proximity.py` | Weighted adjacency matrix from room graph |
-| 7 | `visualize.py` | Bubble diagram visualisation (Fruchterman-Reingold layout) |
-| 8 | `evaluate.py` | Evaluation metrics (mIoU, edge F1, GED, Frobenius) |
-| 9 | `inference.py` | Batch evaluation on test set with GT comparison |
-| 10 | `generate_bubble.py` | End-to-end: image → bubble diagram |
-| 11 | `run_ablation.py` | Automated 6-variant ablation study |
-| 12 | `fig_ablation.py` | Publication-quality ablation bar chart |
-| 13 | `fig_training.py` | Training/validation loss and mIoU curves |
-| 14 | `fig_heatmap.py` | Proximity matrix heatmaps (GT vs Pred) |
-| 15 | `fig_qualitative.py` | Qualitative pipeline panel (3 rows x 7 cols) |
-| 16 | `fig_failures.py` | Failure case analysis (worst edge F1 samples) |
+| 1 | `src/dataset.py` | PyTorch dataset with albumentations augmentation |
+| 2 | `src/train.py` | SegFormer-B3 training (16-class semantic segmentation) |
+| 3 | `src/train_deeplab.py` | DeepLabV3+ alternative training script |
+| 4 | `src/build_graph.py` | Extract room-adjacency graph from segmentation mask |
+| 5 | `src/build_gt_graph.py` | Ground-truth graph from polygon data (Shapely) |
+| 6 | `src/proximity.py` | Weighted adjacency matrix from room graph |
+| 7 | `src/visualize.py` | Bubble diagram visualisation (Fruchterman-Reingold layout) |
+| 8 | `src/evaluate.py` | Evaluation metrics (mIoU, edge F1, GED, Frobenius) |
+| 9 | `src/inference.py` | Batch evaluation on test set with GT comparison |
+| 10 | `src/generate_bubble.py` | End-to-end: image → bubble diagram |
+| 11 | `src/run_ablation.py` | Automated 6-variant ablation study |
+| 12 | `src/generate_survey.py` | Generate paired stimuli for user survey |
+| 13 | `src/generate_survey_docx.py` | Create survey as Word document |
+| 14 | `src/compute_split_stats.py` | Dataset partition statistics |
 
 ## Segmentation Classes
 
@@ -53,29 +51,11 @@ pip install -r requirements.txt
 
 ### Data
 
-This project uses the [ResPlan dataset](https://github.com/ResPlanProject) — rasterised residential floor plans with per-pixel semantic labels.
-
-Expected directory structure:
-
-```
-data/
-  resplan_raster/     # RGB images: {id}.png
-  resplan_masks/      # Grayscale masks: {id}_mask.png
-  splits/
-    train.txt         # one image stem per line
-    val.txt
-    test.txt
-```
-
-> **Note:** Data is not included in this repository due to size. Place the dataset in `data/` or update paths in the config.
+This project uses the [ResPlan dataset](https://github.com/ResPlanProject) — rasterised residential floor plans with per-pixel semantic labels. See [`data/README.md`](data/README.md) for setup instructions.
 
 ### Model Checkpoint
 
-Download the trained checkpoint and place it at:
-
-```
-checkpoints/segformer/best_model.pth
-```
+Download the trained checkpoints and place them in `checkpoints/`. See [`checkpoints/README.md`](checkpoints/README.md) for download links.
 
 ## Usage
 
@@ -83,19 +63,19 @@ checkpoints/segformer/best_model.pth
 
 ```bash
 # single image
-python generate_bubble.py --image path/to/floorplan.png
+python src/generate_bubble.py --image path/to/floorplan.png
 
 # folder of images
-python generate_bubble.py --image path/to/images/ --limit 20
+python src/generate_bubble.py --image path/to/images/ --limit 20
 
 # custom checkpoint and output directory
-python generate_bubble.py --image img.png --ckpt path/to/model.pth --out output/
+python src/generate_bubble.py --image img.png --ckpt path/to/model.pth --out output/
 ```
 
 ### Use in Python / Jupyter
 
 ```python
-from generate_bubble import BubbleGenerator
+from src.generate_bubble import BubbleGenerator
 
 gen = BubbleGenerator("checkpoints/segformer/best_model.pth")
 
@@ -117,51 +97,50 @@ sys.path.insert(0, "/content/drive/MyDrive/bubble_diagram_project")
 
 from generate_bubble import BubbleGenerator
 
-gen = BubbleGenerator("/content/drive/MyDrive/bubble_diagram_project/checkpoints/segformer/best_model.pth")
-gen.show("/content/drive/MyDrive/bubble_diagram_project/data/resplan_raster/42.png")
+gen = BubbleGenerator("checkpoints/segformer/best_model.pth")
+gen.show("data/resplan_raster/42.png")
 ```
 
 ### Train a Model
 
 ```bash
 # SegFormer-B3
-python train.py
+python src/train.py
 
 # DeepLabV3+ (alternative)
-python train_deeplab.py
+python src/train_deeplab.py
 ```
-
-Training saves checkpoints to `checkpoints/segformer/best_model.pth` and logs to `results/history_segformer.json`.
 
 ### Evaluate on Test Set
 
 ```bash
-# full evaluation (pixel metrics + graph metrics)
-python inference.py
-
-# with visual samples
-python inference.py --save-vis 20
+python src/inference.py
 
 # faster (reduce GED timeout)
-python inference.py --ged-timeout 5
+python src/inference.py --ged-timeout 5
 ```
 
-Inference supports batch checkpointing (saves every 300 images) and resume on crash. Outputs per-image CSV, summary stats, and per-class IoU to `results/eval_<timestamp>/`.
+Inference supports batch checkpointing (saves every 300 images) and resume on crash.
 
 ### Ablation Study
 
 ```bash
 # run all 6 variants (default: 300 images per variant)
-python run_ablation.py
+python src/run_ablation.py
 
 # fewer images for speed
-python run_ablation.py --limit 100 --ged-timeout 2
-
-# all test images
-python run_ablation.py --limit 0
+python src/run_ablation.py --limit 100 --ged-timeout 2
 ```
 
-Outputs `results/ablation/ablation_results.csv` and `fig4_ablation.pdf`.
+### User Survey
+
+```bash
+# generate paired stimuli (pipeline vs GT)
+python src/generate_survey.py
+
+# create Word document survey
+python src/generate_survey_docx.py
+```
 
 ## Evaluation Metrics
 
@@ -183,14 +162,12 @@ Outputs `results/ablation/ablation_results.csv` and `fig4_ablation.pdf`.
 
 ## Results
 
-Trained SegFormer-B3 on ResPlan dataset (17,107 floor plans):
+### Backbone Comparison
 
-| Metric | Value |
-|--------|-------|
-| val mIoU | 0.965 |
-| test mIoU | 0.998 |
-| Edge F1 | 0.696 |
-| Converged at | Epoch 23 |
+| Method | Params (M) | mIoU | GPU-hours |
+|--------|-----------|------|-----------|
+| SegFormer-B3 | 47.3 | 0.9974 | ~3 (A100) |
+| DeepLabV3+ (R101) | 59.3 | 0.9684 | ~5.4 (A100) |
 
 ### Ablation Results
 
@@ -209,54 +186,80 @@ Key findings: room type classification and dilation-based post-processing are cr
 
 All figures are generated via Python scripts and saved as 300 DPI PDFs:
 
-| Figure | File | Script | Description |
-|--------|------|--------|-------------|
-| Fig 2 | `fig2_loss.pdf` | `fig_training.py` | Training vs validation loss curve |
-| Fig 3 | `fig3_miou.pdf` | `fig_training.py` | Training vs validation mIoU curve |
-| Fig 4 | `fig4_ablation.pdf` | `fig_ablation.py` | Ablation bar chart (Edge F1 + mIoU) |
-| Fig 5 | `fig5_heatmap.pdf` | `fig_heatmap.py` | Proximity matrix heatmaps (GT vs Pred) |
-| Fig 6 | `fig6_qualitative.pdf` | `fig_qualitative.py` | Qualitative pipeline panel (3 rows x 7 cols) |
-| Fig 7 | `fig7_failures.pdf` | `fig_failures.py` | Failure cases with error annotation |
+| Figure | Script | Description |
+|--------|--------|-------------|
+| Fig 1 | `figures/fig_pipeline.py` | Pipeline overview diagram |
+| Fig 2 | `figures/fig_training.py` | Training vs validation loss curve |
+| Fig 3 | `figures/fig_training.py` | Training vs validation mIoU curve |
+| Fig 4 | `figures/fig_ablation.py` | Ablation bar chart (Edge F1 + mIoU) |
+| Fig 5 | `figures/fig_heatmap.py` | Proximity matrix heatmaps (GT vs Pred) |
+| Fig 6 | `figures/fig_qualitative.py` | Qualitative pipeline panel (3 rows x 7 cols) |
+| Fig 7 | `figures/fig_failures.py` | Failure cases with error annotation |
 
 ```bash
-# generate all figures (Fig 2 & 3 need no GPU)
-python fig_training.py
-python fig_heatmap.py
-python fig_qualitative.py
-python fig_failures.py
+# generate figures (Fig 1-3 need no GPU)
+python figures/fig_pipeline.py
+python figures/fig_training.py
+python figures/fig_heatmap.py
+python figures/fig_qualitative.py
+python figures/fig_failures.py
 ```
 
 ## Project Structure
 
 ```
 floorplan-bubble-diagram/
-  dataset.py            # PyTorch dataset + augmentation
-  train.py              # SegFormer-B3 training
-  train_deeplab.py      # DeepLabV3+ training
-  build_graph.py        # Segmentation mask → room graph
-  build_gt_graph.py     # GT polygons → room graph
-  proximity.py          # Room graph → adjacency matrix
-  visualize.py          # Bubble diagram drawing
-  evaluate.py           # Evaluation metrics
-  inference.py          # Batch test-set evaluation
-  generate_bubble.py    # End-to-end bubble diagram generator
-  run_ablation.py       # Automated ablation study (6 variants)
-  fig_ablation.py       # Ablation bar chart generator
-  fig_training.py       # Loss and mIoU curve plots
-  fig_heatmap.py        # Proximity matrix heatmap comparison
-  fig_qualitative.py    # Qualitative pipeline panel
-  fig_failures.py       # Failure case analysis
-  fig2_loss.pdf         # Training vs validation loss
-  fig3_miou.pdf         # Training vs validation mIoU
-  fig4_ablation.pdf     # Ablation bar chart
-  fig5_heatmap.pdf      # Proximity matrix heatmaps
-  fig6_qualitative.pdf  # Qualitative results panel
-  fig7_failures.pdf     # Failure case analysis
-  requirements.txt
-  LICENSE
-  README.md
+├── README.md
+├── LICENSE
+├── CITATION.cff
+├── requirements.txt
+│
+├── src/                        # pipeline scripts
+│   ├── dataset.py
+│   ├── train.py
+│   ├── train_deeplab.py
+│   ├── build_graph.py
+│   ├── build_gt_graph.py
+│   ├── proximity.py
+│   ├── visualize.py
+│   ├── evaluate.py
+│   ├── inference.py
+│   ├── generate_bubble.py
+│   ├── run_ablation.py
+│   ├── compute_split_stats.py
+│   ├── generate_survey.py
+│   ├── generate_survey_docx.py
+│   └── generate_survey_pdf.py
+│
+├── figures/                    # figure generation scripts + PDFs
+│   ├── fig_pipeline.py
+│   ├── fig_training.py
+│   ├── fig_heatmap.py
+│   ├── fig_qualitative.py
+│   ├── fig_failures.py
+│   ├── fig_ablation.py
+│   └── fig_tables.py
+│
+├── checkpoints/                # model weights (not in repo)
+│   └── README.md
+│
+└── data/                       # dataset (not in repo)
+    └── README.md
 ```
 
 ## License
 
 MIT License. See [LICENSE](LICENSE).
+
+## Citation
+
+If you use this code, please cite:
+
+```bibtex
+@software{floorplan_bubble_diagram,
+  title={Automated Bubble Diagram Extraction from Architectural Floor Plans},
+  author={Chenna, Vivek Kumar and Dev, Adhithya},
+  url={https://github.com/vivekkumarchenna-sys/floorplan-bubble-diagram},
+  license={MIT}
+}
+```

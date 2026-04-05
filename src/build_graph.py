@@ -6,19 +6,19 @@ Output : NetworkX graph where nodes = room instances, edges = adjacencies.
 
 Class convention (matches train.py / 16-class floor-plan segmentation):
     0  Background
-    1  LivingRoom
-    2  Bedroom
+    1  Bedroom
+    2  Bathroom
     3  Kitchen
-    4  Bathroom
+    4  Living
     5  Balcony
-    6  Corridor
-    7  Dining
-    8  Storage
-    9  Garage
+    6  Storage
+    7  Stair
+    8  Parking
+    9  Pool
    10  Wall
    11  Door
    12  Window
-   13  Staircase
+   13  FrontDoor
    14  Column
    15  Other
 
@@ -185,6 +185,7 @@ def build_graph_from_segmentation(
     wall_min: int = 20,
     arch_min: int = 30,
     min_room_area: int = 100,
+    pixel_scale: float | None = None,
 ) -> nx.Graph:
     """
     Build a room-adjacency graph from a semantic segmentation mask.
@@ -201,12 +202,15 @@ def build_graph_from_segmentation(
     arch_min      : Minimum opening width (px) to label an edge "arch"
                     when no door is present.
     min_room_area : Connected components smaller than this are discarded.
+    pixel_scale   : If provided (sq m per pixel), each node also gets an
+                    ``area_sqm`` attribute = area_px × pixel_scale.
 
     Returns
     -------
     G : networkx.Graph
         Nodes carry attributes:
             instance_id, class_id, class_name, area_px, centroid
+            area_sqm (only if pixel_scale is provided)
         Edges carry attributes:
             edge_type   : "door" | "arch" | "shared-wall"
             overlap_px  : number of overlapping pixels between dilated masks
@@ -241,13 +245,15 @@ def build_graph_from_segmentation(
     # ── step 3 : build graph nodes ───────────────────────────────────────────
     G = nx.Graph()
     for r in rooms:
-        G.add_node(
-            r.instance_id,
+        attrs = dict(
             class_id=r.class_id,
             class_name=r.class_name,
             area_px=r.area_px,
             centroid=r.centroid,
         )
+        if pixel_scale is not None:
+            attrs["area_sqm"] = round(r.area_px * pixel_scale, 2)
+        G.add_node(r.instance_id, **attrs)
 
     # ── step 4 : pre-compute dilated masks ───────────────────────────────────
     dilated = {r.instance_id: _dilate(r.mask, dilation_px) for r in rooms}
@@ -303,9 +309,12 @@ def graph_summary(G: nx.Graph) -> str:
 
     lines.append("\nNodes:")
     for nid, data in sorted(G.nodes(data=True)):
+        area_str = f"area={data['area_px']:>6d}px"
+        if "area_sqm" in data:
+            area_str += f"  ({data['area_sqm']:.1f} m²)"
         lines.append(
             f"  [{nid:2d}] {data['class_name']:<12s}  "
-            f"area={data['area_px']:>6d}px  "
+            f"{area_str}  "
             f"centroid=({data['centroid'][0]:.0f}, {data['centroid'][1]:.0f})"
         )
 

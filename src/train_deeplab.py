@@ -42,6 +42,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
+from tqdm import tqdm
 import torchvision.models as tvm
 import torchvision.models.segmentation as tvseg
 
@@ -73,9 +74,9 @@ class CFG:
     OUTPUT_STRIDE = 16
 
     # ── training ──────────────────────────────────────────────────────────────
-    EPOCHS        = 100
-    BATCH_SIZE    = 8          # reduce to 4 on 12 GB VRAM
-    NUM_WORKERS   = 4          # 0 on Windows or if multiprocessing hangs
+    EPOCHS        = 50
+    BATCH_SIZE    = 16         # 16 for A100-40GB, 24-32 for A100-80GB
+    NUM_WORKERS   = 8          # 0 on Windows or if multiprocessing hangs
     PIN_MEMORY    = True
 
     LR            = 6e-5
@@ -364,6 +365,8 @@ def run_epoch(
     scaler=None,
     device: torch.device = torch.device("cpu"),
     amp: bool = True,
+    epoch: int = 0,
+    tag: str = "",
 ) -> dict:
     training = optimiser is not None
     model.train() if training else model.eval()
@@ -372,9 +375,12 @@ def run_epoch(
     total_loss = 0.0
     n_batches  = 0
 
+    desc = f"Epoch {epoch:03d} {tag}" if epoch else tag
+    pbar = tqdm(loader, desc=desc, leave=False, dynamic_ncols=True)
+
     ctx = torch.enable_grad() if training else torch.no_grad()
     with ctx:
-        for batch in loader:
+        for batch in pbar:
             images = batch["image"].to(device, non_blocking=True)  # (B,3,H,W)
             masks  = batch["mask"].to(device, non_blocking=True)   # (B,H,W)
 
@@ -401,6 +407,9 @@ def run_epoch(
             total_loss += loss.item()
             n_batches  += 1
 
+            avg_loss = total_loss / n_batches
+            pbar.set_postfix(loss=f"{avg_loss:.4f}")
+
     stats         = metric.compute()
     stats["loss"] = round(total_loss / max(n_batches, 1), 6)
     return stats
@@ -414,6 +423,11 @@ def main():
     # ── reproducibility ───────────────────────────────────────────────────────
     torch.manual_seed(CFG.SEED)
     np.random.seed(CFG.SEED)
+
+    # ── performance optimisations ─────────────────────────────────────────────
+    torch.backends.cuda.matmul.allow_tf32 = True
+    torch.backends.cudnn.allow_tf32 = True
+    torch.backends.cudnn.benchmark = True
 
     # ── output directories ────────────────────────────────────────────────────
     ckpt_dir = CFG.ROOT / "checkpoints" / "deeplab"
@@ -462,8 +476,20 @@ def main():
         pretrained=True,
     ).to(device)
 
+    # freeze early backbone layers (pretrained, rarely need fine-tuning)
+    for param in model.stem.parameters():
+        param.requires_grad = False
+    for param in model.layer1.parameters():
+        param.requires_grad = False
+
     n_params = sum(p.numel() for p in model.parameters()) / 1e6
-    print(f"[model] Parameters: {n_params:.1f} M")
+    n_trainable = sum(p.numel() for p in model.parameters() if p.requires_grad) / 1e6
+    print(f"[model] Parameters: {n_params:.1f} M  (trainable: {n_trainable:.1f} M)")
+
+    # torch.compile for faster training on A100
+    if hasattr(torch, "compile"):
+        model = torch.compile(model)
+        print("[model] torch.compile enabled")
 
     # ── loss ──────────────────────────────────────────────────────────────────
     class_weights = None
@@ -480,9 +506,8 @@ def main():
     # ── optimiser — separate LRs for backbone vs decoder ─────────────────────
     # Backbone is pretrained → lower effective LR via weight decay only.
     # Decoder is randomly initialised → full LR.
+    # stem and layer1 are frozen — only include trainable backbone layers
     backbone_params = (
-        list(model.stem.parameters())   +
-        list(model.layer1.parameters()) +
         list(model.layer2.parameters()) +
         list(model.layer3.parameters()) +
         list(model.layer4.parameters())
@@ -527,10 +552,12 @@ def main():
         train_stats = run_epoch(
             model, train_loader, criterion, train_metric,
             optimiser=optimiser, scaler=scaler, device=device, amp=CFG.AMP,
+            epoch=epoch, tag="train",
         )
         val_stats = run_epoch(
             model, val_loader, criterion, val_metric,
             device=device, amp=CFG.AMP,
+            epoch=epoch, tag="val",
         )
 
         scheduler.step()

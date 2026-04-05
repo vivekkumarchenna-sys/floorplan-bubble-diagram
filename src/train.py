@@ -21,10 +21,12 @@ Colab quick-start
 Directory layout expected (configure via CFG)
 ---------------------------------------------
     data/
-      train/images/   *.png
-      train/masks/    *.png
-      val/images/     *.png
-      val/masks/      *.png
+      resplan_raster/    *.png       (RGB floor plan images)
+      resplan_masks/     *_mask.png  (grayscale segmentation masks, 0-15)
+      splits/
+        train.txt                    (one image stem per line)
+        val.txt
+        test.txt
 """
 
 # ── stdlib ──────────────────────────────────────────────────────────────────
