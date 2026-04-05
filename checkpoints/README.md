@@ -10,8 +10,6 @@ checkpoints/
     best_deeplab.pth     (240 MB, DeepLabV3+ ResNet-101, val mIoU = 0.968)
 ```
 
-**Download links:**
-- SegFormer-B3: [Google Drive link]
-- DeepLabV3+ (R101): [Google Drive link]
+**Download:** [Google Drive](https://drive.google.com/drive/folders/17PHCTLcf0XLgxQR41iXTC3Tz5ezqKzS-?usp=sharing)
 
 These checkpoints are trained on the ResPlan dataset (17,107 floor plans, 16 classes, 512x512).

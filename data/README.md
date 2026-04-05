@@ -30,4 +30,6 @@ data/
 
 ## Obtaining the dataset
 
-The ResPlan dataset is available from [the original authors]. Place the rasterized images and masks in the directory structure shown above. The split files (`train.txt`, `val.txt`, `test.txt`) contain one image stem per line (e.g., `0`, `1`, `42`).
+**Download:** [Google Drive](https://drive.google.com/drive/folders/1YJJPfIVkQEnt1sYkobAKnT9wNWpieGFx?usp=sharing)
+
+Download and extract the contents into this `data/` directory. The split files (`train.txt`, `val.txt`, `test.txt`) contain one image stem per line (e.g., `0`, `1`, `42`).
