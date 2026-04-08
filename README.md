@@ -240,6 +240,9 @@ floorplan-bubble-diagram/
 │   ├── fig_ablation.py
 │   └── fig_tables.py
 │
+├── output/                     # generated bubble diagrams
+│   └── bubbles/
+│
 ├── checkpoints/                # model weights (not in repo)
 │   └── README.md
 │
