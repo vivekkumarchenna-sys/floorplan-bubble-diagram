@@ -7,7 +7,6 @@ checkpoints/
 *.pth
 
 # Output / results
-!output/bubbles/
 results/
 
 # Python
@@ -42,7 +41,7 @@ Thumbs.db
 !data/splits/*.txt
 !checkpoints/README.md
 !data/README.md
-!output/bubbles/*.png
+!Output/*.png
 
 # Conversation logs
 2026-*.txt
