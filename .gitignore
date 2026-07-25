@@ -45,3 +45,6 @@ Thumbs.db
 
 # Conversation logs
 2026-*.txt
+
+# Handoff notes (local only)
+HANDOFF.md
