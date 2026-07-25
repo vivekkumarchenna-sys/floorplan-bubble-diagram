@@ -48,3 +48,8 @@ Thumbs.db
 
 # Handoff notes (local only)
 HANDOFF.md
+
+# Internal docs (local only)
+docs/AREA_SCALING_PROBLEM.md
+docs/CANONICAL_VALUES.md
+docs/COLAB_AREA_FIX.md
