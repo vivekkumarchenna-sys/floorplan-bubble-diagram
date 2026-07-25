@@ -40,6 +40,20 @@ import networkx as nx
 import numpy as np
 
 
+# Node marker area (matplotlib points²) per square metre of floor area.
+# Constant across diagrams so bubble sizes are directly comparable between
+# plans. Only applied when nodes carry ``area_sqm`` (see build_pixel_scale.py).
+# At 40, a 3 m² bathroom draws at 120 pt², clear of the min_node_size floor.
+SQM_TO_POINTS: float = 40.0
+
+# Ceiling for diagrams drawn without a known scale, where node size is
+# normalised within the plan rather than in absolute units. Set near the
+# dataset median largest room (~34 m²) so that unscaled diagrams read at
+# typical size instead of saturating max_node_size and towering over
+# scaled ones placed beside them.
+FALLBACK_MAX_POINTS: float = 1400.0
+
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Color palette — one color per room class
 # ──────────────────────────────────────────────────────────────────────────────
@@ -81,8 +95,8 @@ def draw_bubble_diagram(
     ax: plt.Axes | None = None,
     title: str = "Bubble Diagram",
     *,
-    min_node_size: float = 300,
-    max_node_size: float = 3000,
+    min_node_size: float = 50,
+    max_node_size: float = 5500,
     font_size: int = 9,
     seed: int = 42,
     show_legend: bool = True,
@@ -96,8 +110,13 @@ def draw_bubble_diagram(
                      or ``build_gt_graph_from_polygons``.
     ax             : Matplotlib Axes. Created automatically if None.
     title          : Plot title.
-    min_node_size  : Minimum node marker size (smallest room).
-    max_node_size  : Maximum node marker size (largest room).
+    min_node_size  : Lower clamp on node marker size. Kept small so that
+                     absolute area scaling is not flattened for tiny rooms.
+    max_node_size  : Upper clamp on node marker size, applied when nodes
+                     carry ``area_sqm``. The default clears the 99th
+                     percentile room in ResPlan (~137 m²); larger rooms are
+                     clipped and are usually segmentation merges. Diagrams
+                     without a scale use FALLBACK_MAX_POINTS instead.
     font_size      : Node label font size.
     seed           : Random seed for Fruchterman–Reingold layout.
     show_legend    : Whether to draw the legend.
@@ -119,18 +138,30 @@ def draw_bubble_diagram(
     pos = nx.spring_layout(G, seed=seed, k=2.0 / max(np.sqrt(G.number_of_nodes()), 1))
 
     # ── node sizes (proportional to area) ────────────────────────────────────
-    # works with both build_graph (area_px) and build_gt_graph (area)
-    areas = []
-    for nid in G.nodes():
-        data = G.nodes[nid]
-        areas.append(data.get("area_px", data.get("area", 500)))
-    areas = np.array(areas, dtype=float)
-
-    if areas.max() > areas.min():
-        norm = (areas - areas.min()) / (areas.max() - areas.min())
+    # When area_sqm is available, size is absolute (points² per m²) so that
+    # bubbles are comparable across diagrams. Otherwise size is proportional to
+    # pixel area normalised within the plan, which keeps ratios honest but is
+    # not comparable with other diagrams.
+    areas_sqm = [G.nodes[nid].get("area_sqm") for nid in G.nodes()]
+    if areas_sqm and all(a is not None for a in areas_sqm):
+        node_sizes = np.clip(np.array(areas_sqm, dtype=float) * SQM_TO_POINTS,
+                             min_node_size, max_node_size)
     else:
-        norm = np.full_like(areas, 0.5)
-    node_sizes = min_node_size + norm * (max_node_size - min_node_size)
+        # works with both build_graph (area_px) and build_gt_graph (area)
+        areas = np.array(
+            [G.nodes[nid].get("area_px", G.nodes[nid].get("area", 500))
+             for nid in G.nodes()], dtype=float)
+        # Scale relative to the largest room so marker area stays proportional
+        # to floor area. Min-max normalisation would instead pin the smallest
+        # room to the floor and the largest to the ceiling, exaggerating their
+        # ratio whenever the rooms are close in size. Pixel areas are not
+        # comparable between plans, so normalising per plan loses nothing.
+        peak = areas.max()
+        if peak > 0:
+            node_sizes = np.clip(areas / peak * FALLBACK_MAX_POINTS,
+                                 min_node_size, FALLBACK_MAX_POINTS)
+        else:
+            node_sizes = np.full_like(areas, min_node_size)
 
     # ── node colors ──────────────────────────────────────────────────────────
     node_colors = [
@@ -231,9 +262,15 @@ def draw_bubble_diagram(
                     )
                 )
 
+        # place the legend below the diagram (horizontal strip) so it never
+        # overlaps the bubbles. The empty spacer patch is dropped here since a
+        # blank column reads oddly in a horizontal layout.
+        row_handles = [h for h in legend_handles if h.get_label()]
         ax.legend(
-            handles=legend_handles,
-            loc="upper left",
+            handles=row_handles,
+            loc="upper center",
+            bbox_to_anchor=(0.5, -0.02),
+            ncol=min(len(row_handles), 6),
             framealpha=0.9,
             fontsize=9,
             title="Room types & edges",

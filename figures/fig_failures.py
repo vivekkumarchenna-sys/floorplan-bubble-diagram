@@ -33,10 +33,12 @@ import torch
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
+import matplotlib.patches as mpatches
+import matplotlib.lines as mlines
 
 from build_graph import build_graph_from_segmentation
 from build_gt_graph import mask_to_plan_dict, build_gt_graph_from_polygons
-from visualize import draw_bubble_diagram
+from visualize import draw_bubble_diagram, ROOM_COLORS, EDGE_STYLES, _FALLBACK_COLOR
 from inference import load_model, predict_mask, IMG_SIZE, NUM_CLASSES
 
 # ── style ─────────────────────────────────────────────────────────────────────
@@ -92,6 +94,10 @@ def generate_failures(df_worst, model, device, root, save_path):
 
     col_titles = ["Input", "GT Mask", "Pred Mask", "GT Graph", "Pred Graph", "Failure Analysis"]
 
+    # collect room types + edge types actually drawn, for a single shared legend
+    seen_classes: list[str] = []
+    seen_edges: list[str] = []
+
     for row, (_, info) in enumerate(df_worst.iterrows()):
         stem = str(int(info["stem"]) if isinstance(info["stem"], float) else info["stem"])
 
@@ -136,17 +142,28 @@ def generate_failures(df_worst, model, device, root, save_path):
 
         # col 3: GT graph
         if G_gt.number_of_nodes() > 0:
-            draw_bubble_diagram(G_gt, ax=axes[row, 3], title="")
+            draw_bubble_diagram(G_gt, ax=axes[row, 3], title="", show_legend=False)
         else:
             axes[row, 3].text(0.5, 0.5, "N/A", ha="center", va="center",
                               transform=axes[row, 3].transAxes)
 
         # col 4: pred graph
         if G_pred.number_of_nodes() > 0:
-            draw_bubble_diagram(G_pred, ax=axes[row, 4], title="")
+            draw_bubble_diagram(G_pred, ax=axes[row, 4], title="", show_legend=False)
         else:
             axes[row, 4].text(0.5, 0.5, "N/A", ha="center", va="center",
                               transform=axes[row, 4].transAxes)
+
+        # record room + edge types present (for the single shared legend)
+        for G in (G_gt, G_pred):
+            for nid in G.nodes():
+                cname = G.nodes[nid]["class_name"]
+                if cname not in seen_classes:
+                    seen_classes.append(cname)
+            for _, _, d in G.edges(data=True):
+                et = d.get("edge_type")
+                if et in EDGE_STYLES and et not in seen_edges:
+                    seen_edges.append(et)
 
         # col 5: metrics annotation
         ax = axes[row, 5]
@@ -176,9 +193,32 @@ def generate_failures(df_worst, model, device, root, save_path):
     for c, title in enumerate(col_titles):
         axes[0, c].set_title(title, fontweight="bold", fontsize=11)
 
+    # ── single shared legend for all graph panels ────────────────────────────
+    handles = []
+    for cname in ROOM_COLORS:                       # canonical order
+        if cname in seen_classes:
+            handles.append(mpatches.Patch(
+                facecolor=ROOM_COLORS[cname], edgecolor="#333333",
+                linewidth=1.0, label=cname))
+    for cname in seen_classes:                      # any unmapped classes last
+        if cname not in ROOM_COLORS:
+            handles.append(mpatches.Patch(
+                facecolor=_FALLBACK_COLOR, edgecolor="#333333",
+                linewidth=1.0, label=cname))
+    for et in EDGE_STYLES:                           # edge types, canonical order
+        if et in seen_edges:
+            s = EDGE_STYLES[et]
+            handles.append(mlines.Line2D([], [], color=s["color"],
+                                         linestyle=s["style"], linewidth=s["width"],
+                                         label=et))
+
     fig.suptitle("Failure Case Analysis — Worst Edge F1 Samples",
                  fontsize=14, fontweight="bold", y=1.01)
-    fig.tight_layout()
+    fig.tight_layout(rect=[0, 0.045, 1, 1])
+    if handles:
+        fig.legend(handles=handles, title="Room types & edges",
+                   loc="lower center", ncol=len(handles),
+                   bbox_to_anchor=(0.5, 0.0), frameon=True, fontsize=9)
     fig.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
     print(f"Saved → {save_path}")
