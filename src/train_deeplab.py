@@ -1,11 +1,11 @@
 """
-train_deeplab.py — DeepLabV3+ training for 16-class semantic segmentation
+train_deeplab.py - DeepLabV3+ training for 16-class semantic segmentation
 =========================================================================
 Backbone   : ResNet-101 pretrained on COCO  (torchvision)
 Decoder    : DeepLabV3+ (ASPP + low-level features from layer1)
 Input size : 512 × 512
 Classes    : 16
-Loss       : weighted CrossEntropy + 0.5 × Dice
+Loss       : uniform CrossEntropy (CLASS_WEIGHTS = None) + 0.5 × Dice
 Optimiser  : AdamW  lr=6e-5  weight_decay=0.01
 Schedule   : CosineAnnealingLR  T_max=100  eta_min=1e-7
 Early stop : patience=15  (monitor val mIoU)
@@ -162,7 +162,7 @@ class DeepLabV3Plus(nn.Module):
     DeepLabV3+ with a ResNet-50 or ResNet-101 backbone.
 
     The encoder uses dilated convolutions at layer3/layer4 so the backbone
-    never needs to be retrained from scratch — torchvision COCO weights fit.
+    never needs to be retrained from scratch - torchvision COCO weights fit.
 
     low-level features  : layer1 output  →  48-ch projection  (1/4 scale)
     high-level features : ASPP on layer4 output               (1/OS scale)
@@ -503,10 +503,10 @@ def main():
         ignore_index=CFG.IGNORE_INDEX,
     )
 
-    # ── optimiser — separate LRs for backbone vs decoder ─────────────────────
+    # ── optimiser - separate LRs for backbone vs decoder ─────────────────────
     # Backbone is pretrained → lower effective LR via weight decay only.
     # Decoder is randomly initialised → full LR.
-    # stem and layer1 are frozen — only include trainable backbone layers
+    # stem and layer1 are frozen - only include trainable backbone layers
     backbone_params = (
         list(model.layer2.parameters()) +
         list(model.layer3.parameters()) +
@@ -542,9 +542,9 @@ def main():
     best_miou  = -1.0
     es_counter = 0
 
-    print(f"\n{'─'*68}")
+    print(f"\n{'-'*68}")
     print(f"  DeepLabV3+ ({CFG.BACKBONE})  |  {CFG.NUM_CLASSES} classes  |  {CFG.EPOCHS} epochs")
-    print(f"{'─'*68}\n")
+    print(f"{'-'*68}\n")
 
     for epoch in range(1, CFG.EPOCHS + 1):
         t0 = time.time()
@@ -581,7 +581,7 @@ def main():
         print(
             f"[{epoch:03d}/{CFG.EPOCHS}]  "
             f"lr={lr_now:.2e}  "
-            f"train loss={train_stats['loss']:.4f}  mIoU={train_stats['mIoU']:.4f}  │  "
+            f"train loss={train_stats['loss']:.4f}  mIoU={train_stats['mIoU']:.4f}  |  "
             f"val loss={val_stats['loss']:.4f}  mIoU={val_stats['mIoU']:.4f}  "
             f"({elapsed:.0f}s)"
         )
@@ -606,7 +606,7 @@ def main():
                 },
                 ckpt_path,
             )
-            print(f"           ✓ new best mIoU={best_miou:.4f}  → saved {ckpt_path}")
+            print(f"           [OK] new best mIoU={best_miou:.4f}  -> saved {ckpt_path}")
         else:
             es_counter += 1
             if es_counter >= CFG.ES_PATIENCE:
@@ -618,8 +618,8 @@ def main():
             json.dump(history, f, indent=2)
 
     print(f"\nTraining complete.  Best val mIoU = {best_miou:.4f}")
-    print(f"  checkpoint → {ckpt_path}")
-    print(f"  history    → {log_path}")
+    print(f"  checkpoint -> {ckpt_path}")
+    print(f"  history    -> {log_path}")
 
 
 # ── inference helper (load best checkpoint) ───────────────────────────────────

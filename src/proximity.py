@@ -1,12 +1,16 @@
 """
-proximity.py — Weighted adjacency (proximity) matrix from a room graph
+proximity.py - Weighted adjacency (proximity) matrix from a room graph
 =======================================================================
 Converts a NetworkX graph (from build_graph.py or build_gt_graph.py)
 into a NumPy weighted adjacency matrix.
 
 Edge weights:
-    door        → 1.0   (strongest connection — direct passage)
+    door        → 1.0   (strongest connection - direct passage)
     arch        → 0.8   (open passage, no physical door)
+    window      → 0.5   (real opening in the wall, not walkable - ResPlan's
+                          via_window, see build_gt_graph.RESPLAN_EDGE_TYPE_MAP.
+                          Provisional weight, halfway between arch and
+                          shared-wall; confirm with the ResPlan authors)
     shared-wall → 0.3   (adjacent but no passage)
 
 Colab usage:
@@ -39,6 +43,7 @@ import networkx as nx
 DEFAULT_WEIGHTS: dict[str, float] = {
     "door":        1.0,
     "arch":        0.8,
+    "window":      0.5,
     "shared-wall": 0.3,
 }
 
@@ -53,9 +58,12 @@ def compute_proximity_matrix(
     Parameters
     ----------
     G       : NetworkX graph produced by ``build_graph_from_segmentation``
-              or ``build_gt_graph_from_polygons``.  Each edge must have an
-              ``edge_type`` attribute ("door", "arch", or "shared-wall").
-              Each node must have a ``class_name`` attribute.
+              (predicted side) or ``build_gt_graph_from_resplan`` (ground
+              truth - see ``build_gt_graph.py``; ``build_gt_graph_from_polygons``
+              is a legacy reconstruction kept only as a second model for
+              comparison, not as ground truth). Each edge must have an
+              ``edge_type`` attribute ("door", "arch", "shared-wall" or
+              "window"). Each node must have a ``class_name`` attribute.
     weights : Optional mapping from edge_type → float weight.
               Defaults to {"door": 1.0, "arch": 0.8, "shared-wall": 0.3}.
 
@@ -128,7 +136,7 @@ def print_proximity_matrix(
 
     # header row
     header = " " * col_w + "".join(f"{l:>{col_w}}" for l in labels)
-    lines = [header, "─" * len(header)]
+    lines = [header, "-" * len(header)]
 
     # data rows
     for i in range(n):

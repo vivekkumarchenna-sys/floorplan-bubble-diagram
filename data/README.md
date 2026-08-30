@@ -10,8 +10,8 @@ data/
   resplan_masks/      # Grayscale segmentation masks: {id}_mask.png (values 0-15)
   resplan_raw/        # ResPlan.pkl (original Shapely polygon annotations)
   splits/
-    train.txt         # 11,973 image stems
-    val.txt           # 2,565 image stems
+    train.txt         # 11,974 image stems
+    val.txt           # 2,566 image stems
     test.txt          # 2,567 image stems
 ```
 
@@ -30,6 +30,6 @@ data/
 
 ## Obtaining the dataset
 
-**Download:** [Google Drive](https://drive.google.com/drive/folders/1YJJPfIVkQEnt1sYkobAKnT9wNWpieGFx?usp=sharing)
+**Download:** [Zenodo](https://doi.org/10.5281/zenodo.21600700)
 
 Download and extract the contents into this `data/` directory. The split files (`train.txt`, `val.txt`, `test.txt`) contain one image stem per line (e.g., `0`, `1`, `42`).

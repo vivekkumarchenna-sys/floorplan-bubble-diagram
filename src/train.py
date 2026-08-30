@@ -1,10 +1,10 @@
 """
-train.py — SegFormer-B3 training for 16-class semantic segmentation
+train.py - SegFormer-B3 training for 16-class semantic segmentation
 ====================================================================
 Pretrained : nvidia/segformer-b3-finetuned-ade-512-512
 Input size : 512 × 512
 Classes    : 16
-Loss       : weighted CrossEntropy + 0.5 × Dice
+Loss       : uniform CrossEntropy (CLASS_WEIGHTS = None) + 0.5 × Dice
 Optimiser  : AdamW  lr=6e-5  weight_decay=0.01
 Schedule   : CosineAnnealingLR  T_max=100
 Early stop : patience=15  (monitor val mIoU)
@@ -391,16 +391,16 @@ def main():
         scheduler.load_state_dict(ckpt["scheduler"])
         best_miou   = ckpt["val_mIoU"]
         start_epoch = ckpt["epoch"] + 1
-        print(f"[resume] Checkpoint loaded — epoch {ckpt['epoch']}  val_mIoU={best_miou:.4f}")
+        print(f"[resume] Checkpoint loaded - epoch {ckpt['epoch']}  val_mIoU={best_miou:.4f}")
         if log_path.exists():
             history = json.load(open(log_path))
             print(f"[resume] History loaded  ({len(history)} epochs)")
     else:
-        print("[resume] No checkpoint found — starting from scratch.")
+        print("[resume] No checkpoint found - starting from scratch.")
 
-    print(f"\n{'─'*65}")
+    print(f"\n{'-'*65}")
     print(f"  Training SegFormer-B3  |  {CFG.NUM_CLASSES} classes  |  {CFG.EPOCHS} epochs")
-    print(f"{'─'*65}\n")
+    print(f"{'-'*65}\n")
 
     for epoch in range(start_epoch, CFG.EPOCHS + 1):
         t0 = time.time()
@@ -438,7 +438,7 @@ def main():
         print(
             f"[{epoch:03d}/{CFG.EPOCHS}]  "
             f"lr={lr_now:.2e}  "
-            f"train loss={train_stats['loss']:.4f}  mIoU={train_stats['mIoU']:.4f}  │  "
+            f"train loss={train_stats['loss']:.4f}  mIoU={train_stats['mIoU']:.4f}  |  "
             f"val loss={val_stats['loss']:.4f}  mIoU={val_stats['mIoU']:.4f}  "
             f"({elapsed:.0f}s)"
         )
@@ -459,7 +459,7 @@ def main():
                 },
                 ckpt_path,
             )
-            print(f"           ✓ new best mIoU={best_miou:.4f}  → saved {ckpt_path}")
+            print(f"           [OK] new best mIoU={best_miou:.4f}  -> saved {ckpt_path}")
         else:
             es_counter += 1
             if es_counter >= CFG.ES_PATIENCE:
@@ -471,8 +471,8 @@ def main():
             json.dump(history, f, indent=2)
 
     print(f"\nTraining complete.  Best val mIoU = {best_miou:.4f}")
-    print(f"  checkpoint → {ckpt_path}")
-    print(f"  history    → {log_path}")
+    print(f"  checkpoint -> {ckpt_path}")
+    print(f"  history    -> {log_path}")
 
 
 # ──────────────────────────────────────────────────────────────────────────────

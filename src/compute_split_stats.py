@@ -1,5 +1,5 @@
 """
-compute_split_stats.py — Count room and door instances per split
+compute_split_stats.py - Count room and door instances per split
 =================================================================
 Reads masks for each split, runs connected-component analysis,
 and outputs dataset partition statistics.

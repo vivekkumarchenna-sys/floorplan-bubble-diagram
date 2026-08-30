@@ -32,6 +32,40 @@ from torch.utils.data import Dataset, DataLoader
 # Augmentation pipelines
 # ---------------------------------------------------------------------------
 
+def _make_coarse_dropout(p: float = 0.3):
+    """CoarseDropout occlusion, portable across albumentations versions.
+
+    Newer albumentations (>= 1.4 / 2.x) renamed the CoarseDropout kwargs, so
+    try the current API first and fall back to the legacy names, letting the
+    same code run on either. ``fill`` (legacy ``fill_value``) sets what the
+    *image* holes are filled with (0 here). The *mask* is deliberately left
+    untouched: ``fill_mask`` (legacy ``mask_fill_value``) is None, i.e. not
+    applied, so the segmentation labels under a hole are preserved.
+    """
+    try:
+        return A.CoarseDropout(
+            num_holes_range=(4, 12),
+            hole_height_range=(16, 64),
+            hole_width_range=(16, 64),
+            fill=0,
+            fill_mask=None,
+            p=p,
+        )
+    except TypeError:
+        # albumentations < 1.4 used the older kwarg names
+        return A.CoarseDropout(
+            max_holes=12,
+            min_holes=4,
+            max_height=64,
+            min_height=16,
+            max_width=64,
+            min_width=16,
+            fill_value=0,
+            mask_fill_value=None,
+            p=p,
+        )
+
+
 def _build_train_transforms(img_size: int = 512) -> A.Compose:
     """
     Training augmentation pipeline:
@@ -65,16 +99,7 @@ def _build_train_transforms(img_size: int = 512) -> A.Compose:
         ),
 
         # ----- occlusion / regularisation -----
-        A.CoarseDropout(
-            max_holes=12,
-            min_holes=4,
-            max_height=64,
-            min_height=16,
-            max_width=64,
-            min_width=16,
-            fill_value=0,     # keeps original mask values under the hole
-            p=0.3,
-        ),
+        _make_coarse_dropout(p=0.3),
 
         # ----- normalisation -----
         A.Normalize(

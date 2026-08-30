@@ -1,12 +1,18 @@
 cff-version: 1.2.0
-title: "Automated Bubble Diagram Extraction from Architectural Floor Plans"
+title: "Typed Bubble Diagrams from Floor Plan Images: A Benchmark Task, Reproducible Baseline and Evaluation Protocol"
 type: software
 authors:
   - family-names: Chenna
     given-names: Vivek Kumar
-  - family-names: Dev
-    given-names: Adhithya
+  - family-names: P
+    given-names: Bimal
 message: "If you use this software, please cite the associated paper."
+version: "1.5"
+date-released: "2026-07-28"
+identifiers:
+  - type: doi
+    value: "10.5281/zenodo.21600700"
+    description: "Complete archive: trained checkpoints, rasterised inputs and user-study materials"
 repository-code: "https://github.com/vivekkumarchenna-sys/floorplan-bubble-diagram"
 license: MIT
 keywords:

@@ -1,5 +1,5 @@
 """
-generate_survey.py — Generate paired stimuli for user survey
+generate_survey.py - Generate paired stimuli for user survey
 =============================================================
 Picks 10 diverse floor plans from the test set and generates:
   - Floor plan image
@@ -37,7 +37,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 
 from build_graph import build_graph_from_segmentation
-from build_gt_graph import mask_to_plan_dict, build_gt_graph_from_polygons
+from build_gt_graph import build_gt_graph_from_resplan, load_resplan_records
 from visualize import draw_bubble_diagram
 from inference import load_model, predict_mask, IMG_SIZE
 
@@ -91,6 +91,7 @@ def generate_survey(n, root, ckpt_path, csv_path, out_dir, seed=42):
     img_dir = root / "data" / "resplan_raster"
     mask_dir = root / "data" / "resplan_masks"
     pixel_scale_map = _load_pixel_scale(root)
+    resplan_records = load_resplan_records(root / "data" / "resplan_raw" / "ResPlan.pkl")
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = load_model(ckpt_path, device)
@@ -127,12 +128,24 @@ def generate_survey(n, root, ckpt_path, csv_path, out_dir, seed=42):
         fig_pred.savefig(pred_path, dpi=200, bbox_inches="tight", facecolor="white")
         plt.close(fig_pred)
 
-        # GT bubble diagram
-        G_gt = build_gt_graph_from_polygons(mask_to_plan_dict(gt_mask))
-        if scale is not None:
+        # GT bubble diagram (ResPlan's own typed graph, not a reconstruction)
+        G_gt = build_gt_graph_from_resplan(resplan_records[int(stem)])
+        # Room-level "area" here is in ResPlan's own polygon coordinate units,
+        # NOT the 512x512 raster pixel units pixel_scale.json was built from
+        # (the two are not the same frame - do not multiply by `scale`, that
+        # would silently mislabel these diagrams). Instead distribute the
+        # plan's own reported net_area (m^2) across rooms in proportion to
+        # their ResPlan polygon area, which needs no external scale factor.
+        net_area = resplan_records[int(stem)].get("net_area")
+        interior_area_raw = sum(
+            d["area"] for _, d in G_gt.nodes(data=True)
+            if d["class_id"] in {1, 2, 3, 4, 6, 7}  # Bedroom/Bathroom/Kitchen/Living/Storage/Stair
+        )
+        if net_area and interior_area_raw > 0:
             for nid in G_gt.nodes():
-                area_px = G_gt.nodes[nid].get("area", 0)
-                G_gt.nodes[nid]["area_sqm"] = round(area_px * scale, 2)
+                G_gt.nodes[nid]["area_sqm"] = round(
+                    G_gt.nodes[nid]["area"] / interior_area_raw * net_area, 2
+                )
         fig_gt, ax_gt = plt.subplots(figsize=(8, 6))
         draw_bubble_diagram(G_gt, ax=ax_gt, title="")
         fig_gt.tight_layout()

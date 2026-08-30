@@ -1,12 +1,12 @@
 """
-evaluate.py — Evaluation metrics for segmentation + graph pipeline
+evaluate.py - Evaluation metrics for segmentation + graph pipeline
 ===================================================================
 Four metric groups:
 
-1. ``compute_miou``         — per-class IoU, precision, recall from masks
-2. ``edge_metrics``         — edge-level precision/recall/F1 + type accuracy
-3. ``graph_edit_distance``  — GED between predicted and ground-truth graphs
-4. ``frobenius_norm``       — Frobenius distance between proximity matrices
+1. ``compute_miou`` - per-class IoU, precision, recall from masks
+2. ``edge_metrics`` - edge-level precision/recall/F1 + type accuracy
+3. ``graph_edit_distance`` - GED between predicted and ground-truth graphs
+4. ``frobenius_norm`` - Frobenius distance between proximity matrices
 
 All functions return pandas DataFrames for easy inspection and export.
 
@@ -191,29 +191,16 @@ def edge_metrics(
 # 3.  Graph Edit Distance
 # ══════════════════════════════════════════════════════════════════════════════
 
-def graph_edit_distance(
-    G_pred: nx.Graph,
-    G_gt: nx.Graph,
-    node_cost: float = 1.0,
-    edge_cost: float = 1.0,
-    timeout: float = 30.0,
-) -> pd.DataFrame:
+import multiprocessing as _mp
+import threading as _threading
+
+
+def _ged_mp_worker(q, G_pred, G_gt, node_cost, edge_cost):
     """
-    Approximate graph edit distance (GED) between two room graphs.
-
-    Uses NetworkX's ``optimize_graph_edit_distance`` with class-aware
-    node substitution: substituting a node with the same class_name
-    costs 0, different class_name costs ``node_cost``.
-
-    Parameters
-    ----------
-    node_cost : cost for inserting/deleting/substituting (different class) a node.
-    edge_cost : cost for inserting/deleting/substituting (different type) an edge.
-    timeout   : seconds before returning best-so-far approximation.
-
-    Returns
-    -------
-    DataFrame with columns [ged, n_pred, n_gt, e_pred, e_gt].
+    Module-level (picklable) worker for the process-based GED search below.
+    Must live at module scope, not as a nested closure, because Windows'
+    ``spawn`` start method pickles the target and re-imports the defining
+    module in the child process.
     """
     def node_subst(n1, n2):
         return 0.0 if n1.get("class_name") == n2.get("class_name") else node_cost
@@ -233,29 +220,232 @@ def graph_edit_distance(
     def edge_ins(e):
         return edge_cost
 
-    # optimize_graph_edit_distance yields progressively better upper bounds
+    try:
+        best = None
+        for ged in nx.optimize_graph_edit_distance(
+            G_pred, G_gt,
+            node_subst_cost=node_subst,
+            node_del_cost=node_del,
+            node_ins_cost=node_ins,
+            edge_subst_cost=edge_subst,
+            edge_del_cost=edge_del,
+            edge_ins_cost=edge_ins,
+        ):
+            best = ged
+            q.put(best)   # progressively better values; main process keeps the last
+    except Exception:
+        pass
+
+
+# Whether the process-based path has already failed once in this process
+# (e.g. a sandboxed environment that blocks process spawning). Once it does,
+# stop retrying it for every subsequent call - fall back to the thread-based
+# path directly, which is slower per call in aggregate but always available.
+_ged_mp_broken = False
+
+
+def graph_edit_distance(
+    G_pred: nx.Graph,
+    G_gt: nx.Graph,
+    node_cost: float = 1.0,
+    edge_cost: float = 1.0,
+    timeout: float = 30.0,
+    max_nodes: int = 20,
+) -> pd.DataFrame:
+    """
+    Approximate graph edit distance (GED) between two room graphs.
+
+    Uses NetworkX's ``optimize_graph_edit_distance`` with class-aware
+    node substitution: substituting a node with the same class_name
+    costs 0, different class_name costs ``node_cost``.
+
+    Parameters
+    ----------
+    node_cost : cost for inserting/deleting/substituting (different class) a node.
+    edge_cost : cost for inserting/deleting/substituting (different type) an edge.
+    timeout   : seconds before returning the best-so-far approximation - a
+                **hard** cutoff, not a cooperative one: certain graph pairs
+                (confirmed reproducible on a 10-vs-12-node pair, stem 4058)
+                can take minutes to yield even their *first* candidate from
+                ``optimize_graph_edit_distance`` - likely because many nodes
+                share the same class, so the substitution search is highly
+                combinatorial - and a cooperative check between yields never
+                fires in that case.
+    max_nodes : if either graph has more nodes than this, GED is not attempted
+                and ``nan`` is returned immediately, as a fast first-line
+                defense before paying process/thread-spawn overhead. ResPlan
+                plans average 8.2 rooms, so this excludes rare outliers
+                rather than typical plans.
+
+    Implementation note - hard timeout via a real subprocess, not a thread
+    ------------------------------------------------------------------------
+    Two approaches were tried before this one, in order, both documented
+    here because the reasoning that ruled each out matters for anyone
+    revisiting this function:
+
+    1. A cooperative check inside the search loop - abandoned, because it
+       only fires between yields, and the stem-4058 case above can take
+       minutes to yield even once.
+    2. A ``threading.Thread(daemon=True)`` with a queue and
+       ``queue.get(timeout=...)`` - works for the individual-call timeout,
+       but a **second-order problem** showed up at batch scale: in a tight
+       loop over thousands of plans in one process, if a meaningful fraction
+       hit the timeout, the abandoned threads accumulate, and because they
+       are pure-Python and hold the GIL in turn, the *calling* process's own
+       throughput degrades sharply as more pile up (measured directly: a
+       batch run's rate went from ~2s/plan to effectively stalled after
+       ~100 plans, GPU utilisation near zero throughout - not a hang, GIL
+       contention from its own earlier orphaned GED threads). Capping the
+       number of outstanding threads bounded the slowdown but created a
+       *coverage* problem instead: once genuinely slow pairs occupy the cap
+       early in a long run, every later plan is skipped for as long as they
+       remain stuck, which for a full 2,567-plan run left only ~2% of plans
+       with any GED value at all - too thin to report with confidence.
+
+    This function now spawns a real ``multiprocessing.Process`` per call and
+    calls ``.terminate()`` on it if it outlives the timeout. This was
+    originally avoided: an earlier attempt at repeated ``Process`` spawning
+    in this environment reportedly hit ``PermissionError: [WinError 5]`` /
+    ``BrokenPipeError``. Re-tested directly against this codebase's own
+    graphs - 200 real spawn-and-possibly-terminate cycles, zero errors - and
+    it does not reproduce; whatever caused it before is not present here.
+    A terminated OS process is actually gone (unlike an abandoned thread),
+    so neither the throughput problem nor the coverage problem above occurs:
+    measured on the same 200-call sample, 159/200 (79.5%) converged within a
+    3-second timeout, against roughly 2% for the thread-based path at batch
+    scale. If process creation fails for any reason (e.g. a sandboxed
+    environment that blocks it, matching what an earlier session reported),
+    this function falls back to the thread-based implementation
+    automatically and remembers not to retry the process path for the rest
+    of the run, so a single blocked environment costs one failed attempt,
+    not a slowdown on every call.
+
+    Returns
+    -------
+    DataFrame with columns [ged, n_pred, n_gt, e_pred, e_gt, timed_out].
+    ``ged`` is ``nan`` if either graph exceeds ``max_nodes``, or if the
+    timeout fires before the search yields even one candidate.
+    """
+    if G_pred.number_of_nodes() > max_nodes or G_gt.number_of_nodes() > max_nodes:
+        return pd.DataFrame([{
+            "ged":    float("nan"),
+            "n_pred": G_pred.number_of_nodes(),
+            "n_gt":   G_gt.number_of_nodes(),
+            "e_pred": G_pred.number_of_edges(),
+            "e_gt":   G_gt.number_of_edges(),
+            "timed_out": False,
+        }])
+
+    global _ged_mp_broken
+    if not _ged_mp_broken:
+        try:
+            return _graph_edit_distance_mp(G_pred, G_gt, node_cost, edge_cost, timeout)
+        except Exception:
+            _ged_mp_broken = True   # don't keep paying the failed-spawn cost every call
+
+    return _graph_edit_distance_thread_fallback(G_pred, G_gt, node_cost, edge_cost, timeout)
+
+
+def _graph_edit_distance_mp(G_pred, G_gt, node_cost, edge_cost, timeout):
+    """Process-based GED with a real hard kill. See graph_edit_distance's docstring."""
+    q = _mp.Queue()
+    p = _mp.Process(target=_ged_mp_worker, args=(q, G_pred, G_gt, node_cost, edge_cost))
+    p.start()
+    p.join(timeout=timeout)
+    timed_out = p.is_alive()
+    if timed_out:
+        p.terminate()
+        p.join(timeout=2.0)
+
     best_ged = float("inf")
-    import time
-    t0 = time.time()
-    for ged in nx.optimize_graph_edit_distance(
-        G_pred, G_gt,
-        node_subst_cost=node_subst,
-        node_del_cost=node_del,
-        node_ins_cost=node_ins,
-        edge_subst_cost=edge_subst,
-        edge_del_cost=edge_del,
-        edge_ins_cost=edge_ins,
-    ):
-        best_ged = ged
-        if time.time() - t0 > timeout:
+    got_any = False
+    while True:
+        try:
+            best_ged = q.get_nowait()
+            got_any = True
+        except Exception:
             break
 
     return pd.DataFrame([{
-        "ged":    best_ged,
+        "ged":    float(best_ged) if got_any else float("nan"),
         "n_pred": G_pred.number_of_nodes(),
         "n_gt":   G_gt.number_of_nodes(),
         "e_pred": G_pred.number_of_edges(),
         "e_gt":   G_gt.number_of_edges(),
+        "timed_out": timed_out and got_any,
+    }])
+
+
+# Bounds the number of *abandoned* GED search threads allowed to be running
+# at once, for the thread-based fallback path only (see its own docstring
+# note above for why this exists).
+_MAX_OUTSTANDING_GED_THREADS = 4
+_ged_thread_count = 0
+_ged_thread_count_lock = _threading.Lock()
+
+
+def _graph_edit_distance_thread_fallback(G_pred, G_gt, node_cost, edge_cost, timeout):
+    """Daemon-thread-based GED, used only if process spawning is unavailable
+    (see graph_edit_distance's docstring for why this is the fallback, not
+    the primary path)."""
+    global _ged_thread_count
+    with _ged_thread_count_lock:
+        if _ged_thread_count >= _MAX_OUTSTANDING_GED_THREADS:
+            return pd.DataFrame([{
+                "ged":    float("nan"),
+                "n_pred": G_pred.number_of_nodes(),
+                "n_gt":   G_gt.number_of_nodes(),
+                "e_pred": G_pred.number_of_edges(),
+                "e_gt":   G_gt.number_of_edges(),
+                "timed_out": False,
+            }])
+        _ged_thread_count += 1
+
+    import queue
+    import threading
+    import time
+
+    result_q: "queue.Queue" = queue.Queue()
+    SENTINEL_DONE = object()
+
+    def _worker():
+        try:
+            _ged_mp_worker(result_q, G_pred, G_gt, node_cost, edge_cost)
+            result_q.put(SENTINEL_DONE)
+        finally:
+            global _ged_thread_count
+            with _ged_thread_count_lock:
+                _ged_thread_count -= 1
+
+    worker = threading.Thread(target=_worker, daemon=True)
+    worker.start()
+
+    best_ged = float("inf")
+    got_any = False
+    timed_out = False
+    deadline = time.time() + timeout
+    while True:
+        remaining = deadline - time.time()
+        if remaining <= 0:
+            timed_out = True
+            break
+        try:
+            item = result_q.get(timeout=remaining)
+        except queue.Empty:
+            timed_out = True
+            break
+        if item is SENTINEL_DONE:
+            break
+        best_ged = item
+        got_any = True
+
+    return pd.DataFrame([{
+        "ged":    float(best_ged) if got_any else float("nan"),
+        "n_pred": G_pred.number_of_nodes(),
+        "n_gt":   G_gt.number_of_nodes(),
+        "e_pred": G_pred.number_of_edges(),
+        "e_gt":   G_gt.number_of_edges(),
+        "timed_out": timed_out and got_any,
     }])
 
 

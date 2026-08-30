@@ -1,5 +1,5 @@
 """
-generate_survey_docx.py — Create a survey Word document from generated stimuli
+generate_survey_docx.py - Create a survey Word document from generated stimuli
 ================================================================================
 Reads survey_stimuli.csv and the corresponding images, then builds
 a .docx with one stimulus per page: floor plan + bubble diagram + rating.

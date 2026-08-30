@@ -1,5 +1,5 @@
 """
-build_pixel_scale.py — Derive per-plan pixel scale from ResPlan ground truth
+build_pixel_scale.py - Derive per-plan pixel scale from ResPlan ground truth
 ============================================================================
 Writes ``pixel_scale.json``: a mapping ``{stem: m² per pixel}`` used by
 ``build_graph.py`` to attach ``area_sqm`` to room nodes.
@@ -66,8 +66,7 @@ from scipy import ndimage
 from tqdm import tqdm
 
 
-# Room classes whose pixels net_area is taken to cover (balcony excluded —
-# it yields a bathroom median closer to the architectural norm than including
+# Room classes whose pixels net_area is taken to cover (balcony excluded - # it yields a bathroom median closer to the architectural norm than including
 # it, and matches the usual definition of net internal area).
 INTERIOR_CLASSES = [1, 2, 3, 4, 6, 7]   # bedroom bath kitchen living storage stair
 
@@ -150,7 +149,7 @@ def main() -> None:
                "tiny_mask": 0, "fp_mismatch": 0, "scale_range": 0}
 
     for stem in tqdm(ordered, desc="Deriving scale"):
-        # Cheap pickle-only gates first — no disk read for plans that fail.
+        # Cheap pickle-only gates first - no disk read for plans that fail.
         idx = by_id.get(int(stem))
         if idx is None:
             skipped["no_entry"] += 1

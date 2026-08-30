@@ -1,5 +1,5 @@
 """
-generate_bubble.py — Image → SegFormer → Bubble Diagram
+generate_bubble.py - Image → SegFormer → Bubble Diagram
 ========================================================
 Standalone script: give it a floor-plan image (or folder of images),
 it runs the trained model and outputs bubble diagram(s).
@@ -50,6 +50,7 @@ from build_graph import (
 )
 from proximity import compute_proximity_matrix, print_proximity_matrix
 from visualize import draw_bubble_diagram
+import render_bubble as rb
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Constants
@@ -63,21 +64,12 @@ IMAGENET_STD  = np.array([0.229, 0.224, 0.225], dtype=np.float32)
 
 _IMG_EXTS = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
 
-# Mask overlay palette (class_id → RGB)
-_PALETTE = np.zeros((NUM_CLASSES, 3), dtype=np.uint8)
-_PALETTE[1]  = (100, 200, 100)   # Bedroom
-_PALETTE[2]  = (132, 199, 129)   # Bathroom
-_PALETTE[3]  = (100, 150, 200)   # Kitchen
-_PALETTE[4]  = (255, 138, 101)   # Living
-_PALETTE[5]  = (140, 220, 180)   # Balcony
-_PALETTE[6]  = (200, 200, 200)   # Storage
-_PALETTE[7]  = (220, 180, 140)   # Stair
-_PALETTE[8]  = (180, 180, 180)   # Parking
-_PALETTE[9]  = (140, 180, 220)   # Pool
-_PALETTE[10] = (80,  80,  80)    # Wall
-_PALETTE[11] = (200, 0,   0)     # Door
-_PALETTE[12] = (0,   200, 200)   # Window
-_PALETTE[13] = (255, 140, 0)     # FrontDoor
+# Derived from inference.py's canonical palette rather than restated here.
+# Every past copy of this table drifted from it independently (a BGR/RGB
+# swap, then a four-class cyclic shift, then three near-identical greens);
+# deriving it removes the possibility by construction.
+from inference import _PALETTE as _BGR_PALETTE
+_PALETTE = _BGR_PALETTE[:, ::-1].copy()   # canonical palette is BGR, figures draw RGB
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -88,12 +80,17 @@ class BubbleGenerator:
     """Load model once, generate bubble diagrams for any number of images."""
 
     def __init__(self, ckpt_path: str | Path, device: str | None = None,
-                 pixel_scale_path: str | Path | None = None):
+                 pixel_scale_path: str | Path | None = None,
+                 legacy: bool = False):
         if device is None:
             device = "cuda" if torch.cuda.is_available() else "cpu"
         self.device = torch.device(device)
         self.model = self._load_model(ckpt_path)
         self.pixel_scale_map = self._load_pixel_scale(pixel_scale_path)
+        # legacy=True selects the pre-rework dilation-based M2, the weighted
+        # proximity matrix and the force-directed rendering. The default is the
+        # geometry-based pipeline the paper reports (Sections 5.2-5.4).
+        self.legacy = legacy
 
     def _load_model(self, ckpt_path: str | Path) -> SegformerForSemanticSegmentation:
         ckpt_path = Path(ckpt_path)
@@ -177,17 +174,21 @@ class BubbleGenerator:
         scale = None
         if self.pixel_scale_map is not None:
             scale = self.pixel_scale_map.get(stem)
-        G = build_graph_from_segmentation(mask, pixel_scale=scale)
-
-        # proximity matrix
-        if G.number_of_nodes() > 0:
-            matrix, labels = compute_proximity_matrix(G)
+        img_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
+        if self.legacy:
+            G = build_graph_from_segmentation(mask, pixel_scale=scale)
+            if G.number_of_nodes() > 0:
+                matrix, labels = compute_proximity_matrix(G)
+            else:
+                matrix, labels = np.zeros((0, 0)), []
         else:
-            matrix, labels = np.zeros((0, 0)), []
+            # M2 (Section 5.2): deterministic geometric typed graph.
+            # M3 (Section 5.3): the categorical typed adjacency matrix.
+            G = rb.build_typed_graph(mask, raster_rgb=img_rgb, pixel_scale=scale)
+            matrix, labels = rb.typed_adjacency(G)
 
         # draw
-        img_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
-        fig, axes = plt.subplots(1, 3, figsize=(20, 7))
+        fig, axes = plt.subplots(1, 3, figsize=(14, 5))
 
         # panel 1: original image
         axes[0].imshow(img_rgb)
@@ -200,9 +201,11 @@ class BubbleGenerator:
         axes[1].set_title("Segmentation", fontsize=13)
         axes[1].axis("off")
 
-        # panel 3: bubble diagram
-        if G.number_of_nodes() > 0:
-            draw_bubble_diagram(G, ax=axes[2], title="Bubble Diagram")
+        # panel 3: typed bubble diagram (M4, Section 5.4)
+        if not self.legacy:
+            rb.draw_typed_bubble(G, axes[2], title="Typed bubble diagram")
+        elif G.number_of_nodes() > 0:
+            draw_bubble_diagram(G, ax=axes[2], title="Bubble Diagram (legacy)")
         else:
             axes[2].text(0.5, 0.5, "No rooms detected", ha="center", va="center",
                          transform=axes[2].transAxes, fontsize=14)
@@ -223,6 +226,13 @@ class BubbleGenerator:
         """Generate and display inline (for Colab/Jupyter)."""
         matplotlib.use("module://matplotlib_inline.backend_inline")
         fig, G, matrix, labels = self.generate(image_path)
+        if not self.legacy:
+            print(f"{G.number_of_nodes()} rooms, {G.number_of_edges()} typed edges")
+            print("")
+            print("Typed adjacency matrix (D door, OP open passage, SW shared wall):")
+            print(rb.format_adjacency(matrix, labels))
+            plt.show()
+            return
         print(graph_summary(G))
         if labels:
             print("\nProximity Matrix:")
@@ -265,12 +275,17 @@ def main():
         "--pixel-scale", type=str, default=None,
         help="Path to pixel_scale.json for area in sq meters (auto-detected if in project root)",
     )
+    parser.add_argument(
+        "--legacy", action="store_true",
+        help="Use the legacy dilation-based M2, the weighted proximity matrix and the "
+             "force-directed rendering instead of the geometry-based pipeline of the paper",
+    )
     args = parser.parse_args()
 
     out_dir = Path(args.out)
     out_dir.mkdir(parents=True, exist_ok=True)
 
-    gen = BubbleGenerator(args.ckpt, pixel_scale_path=args.pixel_scale)
+    gen = BubbleGenerator(args.ckpt, pixel_scale_path=args.pixel_scale, legacy=args.legacy)
 
     # single image or folder
     image_path = Path(args.image)
@@ -283,7 +298,7 @@ def main():
     else:
         raise FileNotFoundError(f"Not found: {image_path}")
 
-    print(f"[run] Processing {len(paths)} image(s) → {out_dir}\n")
+    print(f"[run] Processing {len(paths)} image(s) -> {out_dir}\n")
 
     for i, p in enumerate(paths):
         save_to = out_dir / f"{p.stem}_bubble.png"
@@ -291,7 +306,7 @@ def main():
 
         n = G.number_of_nodes()
         e = G.number_of_edges()
-        print(f"  [{i+1:>4}/{len(paths)}]  {p.stem:>8s}  →  {n} rooms, {e} edges  →  {save_to.name}")
+        print(f"  [{i+1:>4}/{len(paths)}]  {p.stem:>8s}  ->  {n} rooms, {e} edges  ->  {save_to.name}")
 
     print(f"\nDone. Output: {out_dir}")
 

@@ -1,16 +1,16 @@
 """
-run_ablation.py — Automated ablation study (6 variants)
+run_ablation.py - Automated ablation study (6 variants)
 ========================================================
 Runs inference for each ablation variant by patching the graph extraction
 behaviour, collects metrics, and generates the ablation bar chart (Fig 4).
 
 Variants:
-    1. Full pipeline       — baseline, all components active
-    2. w/o door edges      — doors ignored in edge classification
-    3. w/o room types      — all rooms labelled as generic "Room"
-    4. w/o corridor adj.   — no second-order corridor edges
-    5. w/o post-processing — dilation_px=0, min thresholds=0
-    6. w/o edge typing     — all edges labelled "adjacent" (binary)
+    1. Full pipeline - baseline, all components active
+    2. w/o door edges - doors ignored in edge classification
+    3. w/o room types - all rooms labelled as generic "Room"
+    4. w/o storage-room adjacency - remove edges touching Storage rooms
+    5. w/o dilation-based adjacency - dilation_px=0, minimal thresholds
+    6. w/o edge typing - all edges labelled "adjacent" (binary)
 
 Usage:
     !python run_ablation.py
@@ -33,6 +33,13 @@ except NameError:
 
 sys.path.insert(0, str(_SCRIPT_DIR))
 
+# fig_ablation.py lives in the sibling figures/ directory in this repo layout
+# (it is co-located with the scripts in the flat Colab layout); add it so the
+# `from fig_ablation import plot_ablation` below resolves in both.
+_FIGURES_DIR = _SCRIPT_DIR.parent / "figures"
+if _FIGURES_DIR.is_dir():
+    sys.path.insert(0, str(_FIGURES_DIR))
+
 import cv2
 import numpy as np
 import pandas as pd
@@ -42,7 +49,7 @@ from build_graph import (
     CLASS_NAMES, ROOM_CLASSES, DOOR_CLASSES,
     build_graph_from_segmentation,
 )
-from build_gt_graph import mask_to_plan_dict, build_gt_graph_from_polygons
+from build_gt_graph import build_gt_graph_from_resplan, load_resplan_records
 from proximity import compute_proximity_matrix
 from evaluate import compute_miou, edge_metrics, graph_edit_distance, frobenius_norm
 from inference import load_model, predict_mask, IMG_SIZE, NUM_CLASSES
@@ -61,33 +68,33 @@ def _build_graph_full(pred_mask):
 
 
 def _build_graph_no_doors(pred_mask):
-    """Variant 2: w/o door edges — doors ignored in classification."""
+    """Variant 2: w/o door edges - doors ignored in classification."""
     G = build_graph_from_segmentation(pred_mask, door_classes=set())
     return G
 
 
 def _build_graph_no_room_types(pred_mask):
-    """Variant 3: w/o room types — all nodes get generic 'Room' label."""
+    """Variant 3: w/o room types - all nodes get generic 'Room' label."""
     G = build_graph_from_segmentation(pred_mask)
     for nid in G.nodes():
         G.nodes[nid]["class_name"] = "Room"
     return G
 
 
-def _build_graph_no_corridor(pred_mask):
-    """Variant 4: w/o corridor adj. — remove edges involving corridor rooms."""
+def _build_graph_no_storage_adjacency(pred_mask):
+    """Variant 4: w/o storage-room adjacency - remove edges involving Storage rooms."""
     G = build_graph_from_segmentation(pred_mask)
-    corridor_ids = [6]  # Corridor/Storage class
+    storage_ids = [6]  # Storage class
     edges_to_remove = []
     for u, v in G.edges():
-        if G.nodes[u]["class_id"] in corridor_ids or G.nodes[v]["class_id"] in corridor_ids:
+        if G.nodes[u]["class_id"] in storage_ids or G.nodes[v]["class_id"] in storage_ids:
             edges_to_remove.append((u, v))
     G.remove_edges_from(edges_to_remove)
     return G
 
 
 def _build_graph_no_postprocess(pred_mask):
-    """Variant 5: w/o post-processing — no dilation, minimal thresholds."""
+    """Variant 5: w/o post-processing - no dilation, minimal thresholds."""
     return build_graph_from_segmentation(
         pred_mask,
         dilation_px=0,
@@ -95,11 +102,15 @@ def _build_graph_no_postprocess(pred_mask):
         wall_min=1,
         arch_min=1,
         min_room_area=10,
+        # must also be 0 here, not left at its 12px default - this variant's
+        # whole point is "no dilation-based post-processing at all", and the
+        # door-typing test's own dilation radius is post-processing too.
+        door_dilation_px=0,
     )
 
 
 def _build_graph_no_edge_typing(pred_mask):
-    """Variant 6: w/o edge typing — all edges become 'adjacent'."""
+    """Variant 6: w/o edge typing - all edges become 'adjacent'."""
     G = build_graph_from_segmentation(pred_mask)
     for u, v in G.edges():
         G.edges[u, v]["edge_type"] = "adjacent"
@@ -107,12 +118,12 @@ def _build_graph_no_edge_typing(pred_mask):
 
 
 VARIANTS = [
-    ("Full pipeline",       _build_graph_full),
-    ("w/o door edges",      _build_graph_no_doors),
-    ("w/o room types",      _build_graph_no_room_types),
-    ("w/o corridor adj.",   _build_graph_no_corridor),
-    ("w/o post-processing", _build_graph_no_postprocess),
-    ("w/o edge typing",     _build_graph_no_edge_typing),
+    ("Full pipeline",              _build_graph_full),
+    ("w/o door edges",             _build_graph_no_doors),
+    ("w/o room types",             _build_graph_no_room_types),
+    ("w/o storage-room adjacency", _build_graph_no_storage_adjacency),
+    ("w/o dilation-based adjacency", _build_graph_no_postprocess),
+    ("w/o edge typing",            _build_graph_no_edge_typing),
 ]
 
 
@@ -129,6 +140,8 @@ def evaluate_variant(
     img_dir: Path,
     mask_dir: Path,
     ged_timeout: float,
+    resplan_records: dict,
+    skip_ged: bool = False,
 ) -> dict:
     """Run one ablation variant and return aggregated metrics."""
     mious, edge_f1s, geds, frobs = [], [], [], []
@@ -160,7 +173,8 @@ def evaluate_variant(
             G_pred = nx.Graph()
 
         try:
-            G_gt = build_gt_graph_from_polygons(mask_to_plan_dict(gt_mask))
+            plan_id = int(stem)
+            G_gt = build_gt_graph_from_resplan(resplan_records[plan_id]) if plan_id in resplan_records else nx.Graph()
         except Exception:
             G_gt = nx.Graph()
 
@@ -169,8 +183,11 @@ def evaluate_variant(
         edge_f1s.append(df_e["edge_f1"].iloc[0])
 
         # GED
-        df_ged = graph_edit_distance(G_pred, G_gt, timeout=ged_timeout)
-        geds.append(df_ged["ged"].iloc[0])
+        if skip_ged:
+            geds.append(float("nan"))
+        else:
+            df_ged = graph_edit_distance(G_pred, G_gt, timeout=ged_timeout)
+            geds.append(df_ged["ged"].iloc[0])
 
         # frobenius
         A_pred, _ = compute_proximity_matrix(G_pred) if G_pred.number_of_nodes() > 0 else (np.zeros((0, 0)), [])
@@ -184,11 +201,19 @@ def evaluate_variant(
         if (i + 1) % 100 == 0:
             print(f"    [{i+1}/{len(stems)}]")
 
+    # np.mean (not nanmean) would make the whole average NaN if even a
+    # single image's GED timed out with no candidate found - and across 100
+    # images that happens often enough that this silently zeroed out the
+    # entire GED column for every variant (confirmed: this is why it was
+    # blank in every ablation run so far, not because GED itself failed -
+    # individual calls tested fine in isolation).
+    valid_geds = [g for g in geds if not np.isnan(g)]
     return {
         "variant":     variant_name,
         "mIoU":        round(float(np.mean(mious)), 4)    if mious    else 0.0,
         "edge_f1":     round(float(np.mean(edge_f1s)), 4) if edge_f1s else 0.0,
-        "ged":         round(float(np.mean(geds)), 2)     if geds     else 0.0,
+        "ged":         round(float(np.mean(valid_geds)), 2) if valid_geds else float("nan"),
+        "ged_n":       len(valid_geds),
         "frobenius":   round(float(np.mean(frobs)), 4)    if frobs    else 0.0,
         "n_images":    len(mious),
     }
@@ -207,6 +232,10 @@ def main():
                         help="Max test images per variant (0 = all). Default 300 for speed.")
     parser.add_argument("--ged-timeout", type=float, default=5.0,
                         help="GED timeout per image in seconds")
+    parser.add_argument("--skip-ged", action="store_true",
+                        help="Skip GED entirely (some room graphs make "
+                             "optimize_graph_edit_distance take far longer than "
+                             "ged_timeout to yield its first candidate)")
     parser.add_argument("--out", type=str, default=str(_SCRIPT_DIR / "results" / "ablation"))
     args = parser.parse_args()
 
@@ -224,6 +253,9 @@ def main():
     img_dir  = root / "data" / "resplan_raster"
     mask_dir = root / "data" / "resplan_masks"
 
+    print(f"[gt] loading ResPlan's own graphs from data/resplan_raw/ResPlan.pkl")
+    resplan_records = load_resplan_records(root / "data" / "resplan_raw" / "ResPlan.pkl")
+
     # load model once
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     model = load_model(args.ckpt, device)
@@ -240,13 +272,14 @@ def main():
 
         row = evaluate_variant(
             name, builder, stems, model, device,
-            img_dir, mask_dir, args.ged_timeout,
+            img_dir, mask_dir, args.ged_timeout, resplan_records,
+            skip_ged=args.skip_ged,
         )
         elapsed = time.time() - t0
         row["time_s"] = round(elapsed, 1)
         results.append(row)
 
-        print(f"  → mIoU={row['mIoU']:.4f}  edge_f1={row['edge_f1']:.4f}  "
+        print(f"  -> mIoU={row['mIoU']:.4f}  edge_f1={row['edge_f1']:.4f}  "
               f"ged={row['ged']:.2f}  frob={row['frobenius']:.4f}  ({elapsed:.0f}s)")
 
         # save after each variant (crash-safe)
@@ -268,8 +301,8 @@ def main():
         "Full\npipeline",
         "w/o door\nedges",
         "w/o room\ntypes",
-        "w/o corridor\nadj.",
-        "w/o post-\nprocessing",
+        "w/o storage-room\nadjacency",
+        "w/o dilation-based\nadjacency",
         "w/o edge\ntyping",
     ]
     plot_ablation(
@@ -279,8 +312,8 @@ def main():
         save_path=str(out_dir / "fig4_ablation.pdf"),
     )
 
-    print(f"\nResults → {out_dir / 'ablation_results.csv'}")
-    print(f"Figure  → {out_dir / 'fig4_ablation.pdf'}")
+    print(f"\nResults -> {out_dir / 'ablation_results.csv'}")
+    print(f"Figure  -> {out_dir / 'fig4_ablation.pdf'}")
 
 
 if __name__ == "__main__":

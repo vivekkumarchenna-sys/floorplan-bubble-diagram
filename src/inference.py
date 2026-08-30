@@ -1,5 +1,5 @@
 """
-inference.py — Run trained SegFormer on test set and evaluate against GT
+inference.py - Run trained SegFormer on test set and evaluate against GT
 ========================================================================
 Pipeline per image:
     1. Load image → model → predicted segmentation mask
@@ -11,10 +11,10 @@ Pipeline per image:
     7. Proximity diff  : Frobenius norm between adjacency matrices
 
 Outputs saved to  results/eval_<timestamp>/  :
-    per_image.csv        — per-image metrics
-    summary.csv          — aggregated means across test set
-    class_iou.csv        — per-class IoU averaged over all images
-    sample_*.png         — overlay visualisations (first N images)
+    per_image.csv - per-image metrics
+    summary.csv - aggregated means across test set
+    class_iou.csv - per-class IoU averaged over all images
+    sample_*.png - overlay visualisations (first N images)
 
 Colab usage:
     !python inference.py                              # defaults
@@ -50,14 +50,14 @@ import matplotlib.pyplot as plt
 from transformers import SegformerForSemanticSegmentation
 
 # local imports
-from build_graph import (
-    CLASS_NAMES, ROOM_CLASSES, DOOR_CLASSES,
-    build_graph_from_segmentation, graph_summary,
-)
-from build_gt_graph import mask_to_plan_dict, build_gt_graph_from_polygons, gt_graph_summary
+from build_graph import build_graph_from_segmentation
+from build_gt_graph import build_gt_graph_from_resplan, load_resplan_records
 from proximity import compute_proximity_matrix
 from evaluate import compute_miou, edge_metrics, graph_edit_distance, frobenius_norm
-from visualize import draw_bubble_diagram
+# NB: `from visualize import draw_bubble_diagram` is imported lazily inside
+# save_visualisation() instead of here, because visualize.py derives its
+# ROOM_COLORS from this module's _PALETTE at import time; a top-level import
+# either way would create a circular import.
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -144,21 +144,33 @@ def predict_mask(
 # Visualisation helper
 # ══════════════════════════════════════════════════════════════════════════════
 
-# colour palette for mask overlay (class_id → BGR)
+# colour palette for mask overlay (class_id -> BGR, since this blends with an
+# OpenCV BGR image via cv2.addWeighted below).
+#
+# The per-class labels below are the authoritative class -> colour mapping and
+# match build_graph.CLASS_NAMES. The numeric BGR values here are, by design,
+# the BGR encoding of the same colours that visualize.ROOM_COLORS and
+# generate_bubble.py use (stored there as RGB) for the same class id, so a
+# class renders as the same colour whether this overlay or a bubble diagram
+# draws it - in fact visualize.ROOM_COLORS is derived from this array. (An
+# earlier revision had inline labels shifted by one - e.g. index 1 mislabelled
+# "Living" when class 1 is Bedroom, index 7 mislabelled a non-existent "Dining"
+# when class 7 is Stair; only those labels were wrong, never the values, and
+# they are now corrected.)
 _PALETTE = np.zeros((NUM_CLASSES, 3), dtype=np.uint8)
-_PALETTE[1]  = (100, 200, 100)   # Living - green
-_PALETTE[2]  = (132, 199, 129)   # Bedroom - light green
-_PALETTE[3]  = (200, 150, 100)   # Bathroom - blue-ish
-_PALETTE[4]  = (101, 138, 255)   # Kitchen - orange (BGR)
-_PALETTE[5]  = (180, 220, 140)   # Balcony
-_PALETTE[6]  = (200, 200, 200)   # Storage - grey
-_PALETTE[7]  = (140, 180, 220)   # Dining
-_PALETTE[8]  = (180, 180, 180)   # Parking
-_PALETTE[9]  = (220, 180, 140)   # Pool
-_PALETTE[10] = (80,  80,  80)    # Wall - dark grey
-_PALETTE[11] = (0,   0,   200)   # Door - red
-_PALETTE[12] = (200, 200,  0)    # Window - cyan
-_PALETTE[13] = (0,   140, 255)   # FrontDoor - orange
+_PALETTE[1]  = (74, 175, 77)   # Bedroom
+_PALETTE[2]  = (163, 78, 152)   # Bathroom
+_PALETTE[3]  = (184, 126, 55)   # Kitchen
+_PALETTE[4]  = (0, 127, 255)   # Living
+_PALETTE[5]  = (47, 217, 255)   # Balcony
+_PALETTE[6]  = (153, 153, 153)   # Storage
+_PALETTE[7]  = (40, 86, 166)   # Stair
+_PALETTE[8]  = (191, 129, 247)   # Parking
+_PALETTE[9]  = (136, 150, 0)   # Pool
+_PALETTE[10] = (80, 80, 80)   # Wall
+_PALETTE[11] = (0, 0, 200)   # Door
+_PALETTE[12] = (200, 200, 0)   # Window
+_PALETTE[13] = (99, 30, 233)   # FrontDoor
 
 
 def _overlay(image_bgr: np.ndarray, mask: np.ndarray, alpha: float = 0.5) -> np.ndarray:
@@ -179,6 +191,10 @@ def save_visualisation(
     out_path: Path,
 ):
     """Save a 2x2 figure: image, GT overlay, pred overlay, bubble diagrams."""
+    # lazy import to avoid a circular import (see the note by the local-imports
+    # block above): visualize derives ROOM_COLORS from this module's _PALETTE.
+    from visualize import draw_bubble_diagram
+
     fig, axes = plt.subplots(2, 2, figsize=(14, 12))
 
     img_rgb = cv2.cvtColor(image_bgr, cv2.COLOR_BGR2RGB)
@@ -241,7 +257,7 @@ def _save_checkpoint(rows, class_iou_accum, out_dir, total, t_start):
         df_class_avg.to_csv(out_dir / "class_iou.csv", index=False)
 
     elapsed = time.time() - t_start
-    print(f"  [saved] {len(rows)}/{total} images → {out_dir / 'per_image.csv'}  ({elapsed:.0f}s)")
+    print(f"  [saved] {len(rows)}/{total} images -> {out_dir / 'per_image.csv'}  ({elapsed:.0f}s)")
 
 
 def run_evaluation(args):
@@ -261,6 +277,10 @@ def run_evaluation(args):
     if args.limit > 0:
         stems = stems[:args.limit]
     print(f"[data] Test samples: {len(stems)}")
+
+    resplan_pkl = root / "data" / "resplan_raw" / "ResPlan.pkl"
+    print(f"[gt] loading ResPlan's own graphs from {resplan_pkl}")
+    resplan_records = load_resplan_records(resplan_pkl)
 
     # output directory
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -300,7 +320,7 @@ def run_evaluation(args):
         mask_path = mask_dir / f"{stem}_mask.png"
 
         if not img_path.exists() or not mask_path.exists():
-            print(f"  [skip] {stem} — file missing")
+            print(f"  [skip] {stem} - file missing")
             continue
 
         # --- load ---
@@ -325,14 +345,14 @@ def run_evaluation(args):
         try:
             G_pred = build_graph_from_segmentation(pred_mask)
         except Exception as e:
-            print(f"  [warn] {stem} — pred graph failed: {e}")
+            print(f"  [warn] {stem} - pred graph failed: {e}")
             G_pred = __import__("networkx").Graph()
 
         try:
-            plan_dict = mask_to_plan_dict(gt_mask)
-            G_gt = build_gt_graph_from_polygons(plan_dict)
+            plan_id = int(stem)
+            G_gt = build_gt_graph_from_resplan(resplan_records[plan_id])
         except Exception as e:
-            print(f"  [warn] {stem} — GT graph failed: {e}")
+            print(f"  [warn] {stem} - GT graph failed: {e}")
             G_gt = __import__("networkx").Graph()
 
         # --- 3. edge metrics ---
@@ -340,8 +360,11 @@ def run_evaluation(args):
         e = df_edge.iloc[0]
 
         # --- 4. graph edit distance ---
-        df_ged = graph_edit_distance(G_pred, G_gt, timeout=args.ged_timeout)
-        ged = df_ged["ged"].iloc[0]
+        if args.skip_ged:
+            ged = float("nan")
+        else:
+            df_ged = graph_edit_distance(G_pred, G_gt, timeout=args.ged_timeout)
+            ged = df_ged["ged"].iloc[0]
 
         # --- 5. frobenius ---
         A_pred, _ = compute_proximity_matrix(G_pred) if G_pred.number_of_nodes() > 0 else (np.zeros((0, 0)), [])
@@ -455,8 +478,15 @@ def parse_args():
         help="Number of sample visualisations to save (0 to disable)",
     )
     parser.add_argument(
-        "--ged-timeout", type=float, default=2.0,
-        help="Seconds to spend on GED per image (lower = faster but less accurate)",
+        "--ged-timeout", type=float, default=3.0,
+        help="Seconds to spend on GED per image (lower = faster, but fewer "
+             "graphs converge within the cutoff; matches the canonical "
+             "recompute_ged_parallel.py default of 3.0)",
+    )
+    parser.add_argument(
+        "--skip-ged", action="store_true",
+        help="Skip GED entirely (some room graphs make optimize_graph_edit_distance "
+             "take far longer than ged_timeout to yield its first candidate)",
     )
     parser.add_argument(
         "--batch-save", type=int, default=300,

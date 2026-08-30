@@ -1,5 +1,5 @@
 """
-fig_training.py — Fig 2 & Fig 3: Training vs validation loss and mIoU curves
+fig_training.py - Fig 2 & Fig 3: Training vs validation loss and mIoU curves
 =============================================================================
 Reads history_segformer.json and generates two publication-quality PDF plots.
 
@@ -77,7 +77,7 @@ def plot_loss(history: list[dict], save_path: str):
     fig.tight_layout()
     fig.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
-    print(f"Saved → {save_path}")
+    print(f"Saved -> {save_path}")
 
 
 def plot_miou(history: list[dict], save_path: str):
@@ -98,9 +98,10 @@ def plot_miou(history: list[dict], save_path: str):
     ax.annotate(
         f"Best: {val_miou[best_idx]:.4f}\n(epoch {epochs[best_idx]})",
         xy=(epochs[best_idx], val_miou[best_idx]),
-        xytext=(epochs[best_idx] - 5, val_miou[best_idx] - 0.05),
+        xytext=(epochs[best_idx] - 7, val_miou[best_idx] - 0.22),
         arrowprops=dict(arrowstyle="->", color="#ED7D31", lw=1.2),
         fontsize=9, color="#ED7D31", fontweight="bold",
+        ha="center",
     )
 
     ax.set_xlabel("Epoch")
@@ -116,13 +117,13 @@ def plot_miou(history: list[dict], save_path: str):
     fig.tight_layout()
     fig.savefig(save_path, dpi=300, bbox_inches="tight")
     plt.close(fig)
-    print(f"Saved → {save_path}")
+    print(f"Saved -> {save_path}")
 
 
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--history", type=str,
-                        default=str(_SCRIPT_DIR / "results" / "history_segformer.json"))
+                        default=str(_SCRIPT_DIR.parent / "history_segformer.json"))
     parser.add_argument("--out", type=str, default=str(_SCRIPT_DIR))
     args = parser.parse_args()
 

@@ -1,9 +1,13 @@
-# Data (too large for git — host on Google Drive / HuggingFace)
-data/
+# Data (too large for git - host on Google Drive / HuggingFace)
+# Ignore data/ contents but keep the small split lists and README tracked,
+# so the fixed train/val/test partitions ship with the code (reproducibility).
+data/*
+!data/splits/
+!data/README.md
 *.pkl
 
-# Model checkpoints
-checkpoints/
+# Model checkpoints (contents only, so checkpoints/README.md stays tracked)
+checkpoints/*
 *.pth
 
 # Output / results
@@ -30,7 +34,6 @@ build/
 Thumbs.db
 
 # IDE / tools
-.claude/
 
 # Working files
 *.docx
@@ -45,11 +48,3 @@ Thumbs.db
 
 # Conversation logs
 2026-*.txt
-
-# Handoff notes (local only)
-HANDOFF.md
-
-# Internal docs (local only)
-docs/AREA_SCALING_PROBLEM.md
-docs/CANONICAL_VALUES.md
-docs/COLAB_AREA_FIX.md

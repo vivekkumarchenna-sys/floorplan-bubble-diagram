@@ -1,5 +1,5 @@
 """
-generate_survey_pdf.py — Create a survey PDF from generated stimuli
+generate_survey_pdf.py - Create a survey PDF from generated stimuli
 ====================================================================
 Reads survey_stimuli.csv and the corresponding images, then builds
 a PDF with one stimulus per page: floor plan (left) + bubble diagram

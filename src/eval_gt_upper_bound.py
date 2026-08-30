@@ -1,5 +1,5 @@
 """
-eval_gt_upper_bound.py — Upper-bound evaluation: M2-M4 on GT masks
+eval_gt_upper_bound.py - Upper-bound evaluation: M2-M4 on GT masks
 ====================================================================
 Runs graph construction (M2), proximity matrix (M3), and evaluation
 using ground-truth segmentation masks as input instead of predicted masks.
@@ -32,7 +32,7 @@ import pandas as pd
 from tqdm import tqdm
 
 from build_graph import build_graph_from_segmentation
-from build_gt_graph import mask_to_plan_dict, build_gt_graph_from_polygons
+from build_gt_graph import build_gt_graph_from_resplan, load_resplan_records
 from proximity import compute_proximity_matrix
 from evaluate import edge_metrics, graph_edit_distance, frobenius_norm
 
@@ -44,7 +44,10 @@ def main():
     parser.add_argument("--split", type=str, default="test")
     parser.add_argument("--limit", type=int, default=0,
                         help="Max images (0 = all)")
-    parser.add_argument("--ged-timeout", type=float, default=2.0)
+    parser.add_argument("--ged-timeout", type=float, default=5.0,
+                        help="Now a real hard cutoff (daemon-thread based, "
+                             "see evaluate.graph_edit_distance) rather than a "
+                             "cooperative one, so this is safe to raise.")
     parser.add_argument("--skip-ged", action="store_true",
                         help="Skip GED computation (faster)")
     parser.add_argument("--mask-dir", type=str, default=None,
@@ -61,7 +64,11 @@ def main():
     if args.limit > 0:
         stems = stems[:args.limit]
 
-    print(f"[eval] Upper-bound evaluation: M2-M4 on GT masks")
+    resplan_pkl = root / "data" / "resplan_raw" / "ResPlan.pkl"
+    print(f"[gt] loading ResPlan's own graphs from {resplan_pkl}")
+    resplan_records = load_resplan_records(resplan_pkl)
+
+    print(f"[eval] Upper-bound evaluation: M2 (on GT masks) vs ResPlan's own graph")
     print(f"[eval] Split: {args.split}  Images: {len(stems)}")
 
     records = []
@@ -79,9 +86,12 @@ def main():
         except Exception:
             continue
 
-        # GT graph from Shapely polygons (same as normal evaluation)
+        # Ground truth: ResPlan's own typed graph, not a reconstruction.
+        plan_id = int(stem)
+        if plan_id not in resplan_records:
+            continue
         try:
-            G_gt = build_gt_graph_from_polygons(mask_to_plan_dict(gt_mask))
+            G_gt = build_gt_graph_from_resplan(resplan_records[plan_id])
         except Exception:
             continue
 
@@ -110,7 +120,7 @@ def main():
             A_gt, _ = compute_proximity_matrix(G_gt) if G_gt.number_of_nodes() > 0 else (np.zeros((0, 0)), [])
             frob_df = frobenius_norm(A_pred, A_gt)
             frob = frob_df.iloc[0]["frobenius"]
-            frob_norm = frob_df.iloc[0]["frob_normalized"]
+            frob_norm = frob_df.iloc[0]["normalized"]
         except Exception:
             frob = frob_norm = float("nan")
 
@@ -131,6 +141,18 @@ def main():
 
     df = pd.DataFrame(records)
 
+    # Guard: if nothing was scored (e.g. masks or ResPlan.pkl missing for this
+    # split), df has no columns and every df['...'].mean() below would raise a
+    # KeyError. Report and bail out cleanly instead.
+    if df.empty:
+        print("\n[warn] No images were successfully evaluated (empty result "
+              "set) - nothing to summarise. Check that the masks and "
+              "ResPlan.pkl exist for this split.")
+        out_path = args.out or str(root / "gt_upper_bound.csv")
+        df.to_csv(out_path, index=False)
+        print(f"Saved -> {out_path}")
+        return
+
     # Summary
     print(f"\n{'='*60}")
     print(f"  UPPER-BOUND RESULTS (M2-M4 on GT masks)")
@@ -144,9 +166,30 @@ def main():
     print(f"  Frobenius (n)  : {df['frob_normalized'].mean():.4f}")
     print(f"{'='*60}")
 
-    # Compare with pipeline results
-    pipeline_ef1 = 0.6685
+    # Compare with pipeline results. Read the most recent full-pipeline
+    # inference summary.csv dynamically rather than hardcoding a number here:
+    # a hardcoded value has gone stale at least twice before (once as a
+    # copy-paste of an old run, once as the literal 0.6589 pre-ground-truth-fix
+    # published figure). Anything that silently reuses a magic number here is
+    # exactly the kind of staleness this correction pass was about.
+    pipeline_ef1 = None
+    results_dir = root / "results"
+    if results_dir.exists():
+        candidates = sorted(results_dir.glob("eval_*/summary.csv"), reverse=True)
+        for c in candidates:
+            try:
+                pipeline_ef1 = float(pd.read_csv(c)["edge_f1"].iloc[0])
+                print(f"  (using full-pipeline Edge F1 {pipeline_ef1:.4f} from {c})")
+                break
+            except Exception:
+                continue
     upper_ef1 = df['edge_f1'].mean()
+    if pipeline_ef1 is None:
+        print(f"\n  No results/eval_*/summary.csv found - skipping the")
+        print(f"  pipeline-vs-upper-bound comparison below (run inference.py first).")
+        df.to_csv(args.out or str(root / "gt_upper_bound.csv"), index=False)
+        print(f"\nSaved -> {args.out or str(root / 'gt_upper_bound.csv')}")
+        return
     m1_error_pct = (1 - pipeline_ef1) / (1 - 0) * 100  # total error from pipeline
     m2m4_error = 1 - upper_ef1  # error from M2-M4 alone
     m1_contribution = ((upper_ef1 - pipeline_ef1) / (1 - pipeline_ef1)) * 100 if upper_ef1 > pipeline_ef1 else 0
