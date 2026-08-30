@@ -30,6 +30,6 @@ data/
 
 ## Obtaining the dataset
 
-**Download:** [Zenodo](https://doi.org/10.5281/zenodo.21600700)
+**Download:** [Zenodo](https://doi.org/10.5281/zenodo.21600699)
 
 Download and extract the contents into this `data/` directory. The split files (`train.txt`, `val.txt`, `test.txt`) contain one image stem per line (e.g., `0`, `1`, `42`).

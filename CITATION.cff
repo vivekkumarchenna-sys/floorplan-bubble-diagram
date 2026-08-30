@@ -7,11 +7,11 @@ authors:
   - family-names: P
     given-names: Bimal
 message: "If you use this software, please cite the associated paper."
-version: "1.5"
-date-released: "2026-07-28"
+version: "1.6"
+date-released: "2026-08-30"
 identifiers:
   - type: doi
-    value: "10.5281/zenodo.21600700"
+    value: "10.5281/zenodo.21600699"
     description: "Complete archive: trained checkpoints, rasterised inputs and user-study materials"
 repository-code: "https://github.com/vivekkumarchenna-sys/floorplan-bubble-diagram"
 license: MIT

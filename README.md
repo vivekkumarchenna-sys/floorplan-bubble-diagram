@@ -309,7 +309,7 @@ largely, but not entirely, remove.
 
 The trained SegFormer-B3 and DeepLabV3+ checkpoints are too large for this repository (541 MB and 678 MB on disk, above GitHub's 100 MB per-file limit). A complete archive of the project, including both checkpoints, the rasterised inputs, and the user-study materials, is available at:
 
-https://doi.org/10.5281/zenodo.21600700
+https://doi.org/10.5281/zenodo.21600699
 
 The ResPlan files in that archive are redistributed for reproducibility only. ResPlan is released by its authors under a permissive open-source licence and their release remains the canonical source.
 
