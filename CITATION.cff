@@ -1,5 +1,5 @@
 cff-version: 1.2.0
-title: "Typed Bubble Diagrams from Floor Plan Images: A Benchmark Task, Reproducible Baseline and Evaluation Protocol"
+title: "Typed Bubble Diagrams from Floor Plan Images: A Reproducible Baseline and Evaluation Protocol"
 type: software
 authors:
   - family-names: Chenna

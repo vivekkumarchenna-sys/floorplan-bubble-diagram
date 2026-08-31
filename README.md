@@ -25,6 +25,7 @@ Floor Plan Image  →  Semantic Segmentation  →  Room Graph  →  Bubble Diagr
 | 10 | `src/generate_bubble.py` | End-to-end: image → typed bubble diagram. Uses `render_bubble` (the pipeline the paper reports) by default; `--legacy` selects the pre-rework dilation-based M2, weighted proximity matrix and force-directed rendering |
 | 11 | `src/run_ablation.py` | Automated 6-variant ablation study |
 | 12 | `src/generate_survey.py` | Generate paired stimuli for user survey |
+| 12b | `src/user_study_stats.py` | Reproduce the user-study table (paper Table E.4). The raters scored both conditions, so the test is a **Wilcoxon signed-rank** on participant-level means, not Mann-Whitney over individual rating cells |
 | 13 | `src/generate_survey_docx.py` | Create survey as Word document |
 | 14 | `src/compute_split_stats.py` | Dataset partition statistics |
 | 15 | `src/probe_learned_edge_typing.py` | Feature extraction for an exploratory learned-edge-typing probe (not reported in the paper) |
@@ -255,6 +256,7 @@ floorplan-bubble-diagram/
 │   ├── run_ablation.py
 │   ├── compute_split_stats.py
 │   ├── generate_survey.py
+│   ├── user_study_stats.py      # paired Wilcoxon analysis of the user study
 │   ├── generate_survey_docx.py
 │   ├── generate_survey_pdf.py
 │   ├── benchmark_runtime.py
@@ -323,7 +325,7 @@ If you use this code, please cite:
 
 ```bibtex
 @software{floorplan_bubble_diagram,
-  title={Typed Bubble Diagrams from Floor Plan Images: A Benchmark Task, Reproducible Baseline and Evaluation Protocol},
+  title={Typed Bubble Diagrams from Floor Plan Images: A Reproducible Baseline and Evaluation Protocol},
   author={Chenna, Vivek Kumar and P, Bimal},
   url={https://github.com/vivekkumarchenna-sys/floorplan-bubble-diagram},
   license={MIT}
