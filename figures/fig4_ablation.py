@@ -21,7 +21,7 @@ for k, (name, vals) in enumerate(metrics.items()):
     ax.bar(x + (k - 1.5) * w, vals, w, label=name, color=colors[k], edgecolor="#222", linewidth=0.5)
 ax.set_xticks(x); ax.set_xticklabels(variants, fontsize=10)
 ax.set_ylim(0, 1.08); ax.set_ylabel("score", fontsize=11)
-ax.set_title("Ablation of the M2 rules (800-plan sample, GT masks, vs geometry-based ground truth)",
+ax.set_title("Ablation of the M2 rules (800-plan sample, GT masks, vs geometry-derived reference)",
              fontsize=12, fontweight="bold")
 ax.legend(ncol=4, loc="lower center", bbox_to_anchor=(0.5, -0.20), fontsize=10, frameon=True)
 ax.grid(axis="y", alpha=0.3); ax.set_axisbelow(True)
