@@ -190,9 +190,9 @@ Both models are compared on the same metric - **validation macro mIoU** (mean ov
 | Method | Params (M) | Val mIoU (macro) | GPU-hours |
 |--------|-----------|------------------|-----------|
 | SegFormer-B3 | 47.2 | 0.9651 | ~3 (A100) |
-| DeepLabV3+ (R101) | 59.5 | 0.9684 | ~5.4 (A100) |
+| DeepLabV3+ (R101) | 59.3 | 0.9684 | ~5.4 (A100) |
 
-Parameter counts are exact: 47,236,304 (SegFormer-B3) and 59,452,560 (DeepLabV3+ R101). An earlier version of this table quoted SegFormer's *test per-image* mIoU (0.9974) against DeepLab's *validation macro* mIoU - not the same metric - and listed FLOPs / inference-time figures that are not measured anywhere in this repository.
+Parameter counts are trainable parameters, measured from the released checkpoints: 47,234,768 (SegFormer-B3) and 59,343,024 (DeepLabV3+ R101). Batch-normalisation running statistics are buffers, not parameters, and are excluded; counting them instead gives 47,236,304 and 59,452,560. An earlier version of this table quoted SegFormer's *test per-image* mIoU (0.9974) against DeepLab's *validation macro* mIoU - not the same metric - and listed FLOPs / inference-time figures that are not measured anywhere in this repository.
 
 ### Ablation Results
 
