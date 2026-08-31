@@ -5,7 +5,7 @@ Runs M2 on ground-truth masks (no segmentation, no GPU needed) and scores
 against ResPlan's own typed graph (build_gt_graph_from_resplan), under both
 edge-matching conventions and a sweep of arch_min values. This replaces, with
 the corrected ground truth, the numbers behind:
-    - Table 6, "Upper bound" and "Upper bound, id-independent edge matching"
+    - Table 5, "Upper bound" and "Upper bound, id-independent edge matching"
     - Table 7 / Table D.5, the theta_arch recalibration sweep
     - Table D.4, the edge-type confusion matrix (id-independent, arch_min=30)
 
@@ -56,7 +56,7 @@ def main():
 
     rows = []
     confusion_30 = Counter()               # id-independent, arch_min=30 -> Table D.4
-    confusion_by_am = {am: Counter() for am in ARCH_MINS}   # id-independent, all thresholds -> Table 7/8/D.5
+    confusion_by_am = {am: Counter() for am in ARCH_MINS}   # id-independent, all thresholds -> Table 6/7
 
     for stem in tqdm(stems, desc=f"{args.split} plans"):
         plan_id = int(stem)
@@ -133,7 +133,7 @@ def main():
     conf_path = out.with_name(out.stem + "_confusion_a30.csv")
     pd.DataFrame(conf_rows).to_csv(conf_path, index=False)
 
-    print(f"\n  Threshold sweep, per-type recall (id-independent matching), Table 7/8/D.5:")
+    print(f"\n  Threshold sweep, per-type recall (id-independent matching), Table 6/7:")
     sweep_rows = []
     print(f"    {'arch_min':>9}{'door_rec':>10}{'arch_rec':>10}{'wall_rec':>10}{'macro_rec':>11}{'pooled_acc':>12}")
     for am in ARCH_MINS:

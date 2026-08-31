@@ -13,14 +13,14 @@ Floor Plan Image  →  Semantic Segmentation  →  Room Graph  →  Bubble Diagr
 | 1 | `src/dataset.py` | PyTorch dataset with albumentations augmentation |
 | 2 | `src/train.py` | SegFormer-B3 training (16-class semantic segmentation) |
 | 3 | `src/train_deeplab.py` | DeepLabV3+ alternative training script |
-| 4 | `src/truegraph_builder.py` | **Module M2 (current): geometry-based typed connectivity graph - door / open passage / shared-wall - built directly from the mask; the same `build_true_graph` procedure produces both the geometry-based ground truth and the pipeline graph** |
+| 4 | `src/truegraph_builder.py` | **Module M2 (current): geometry-based typed connectivity graph - door / open passage / shared-wall - built directly from the mask; the same `build_true_graph` procedure produces both the geometry-derived reference and the pipeline graph** |
 | 5 | `src/render_bubble.py` | **M2/M3/M4 as a reusable module: the typed graph as a NetworkX graph, the categorical typed adjacency matrix, and the geographic bubble diagram of Section 5.4 (nodes at room centroids, marker area proportional to floor area, node colour sampled from the raster)** |
 | 6 | `src/build_graph.py` | Legacy dilation-based graph extraction (kept for the ablation and comparison) |
 | 6 | `src/build_gt_graph.py` | Reads ResPlan's own released graph; used only for the dataset-reliability audit, not as ground truth |
 | 7 | `figures/typed_proximity.py`, `figures/adj_matrix.py` | Categorical adjacency views (no weights). Note the two file names are historical and read the wrong way round: `typed_proximity.py` draws the square adjacency matrix and `adj_matrix.py` draws the diamond-lattice proximity chart. `figures/fig5_tables.py` draws both as one figure. `src/proximity.py` is the legacy weighted version |
 | 8 | `src/visualize.py` | Bubble diagram visualisation; geographic bubble diagrams (rooms at their plan positions) are rendered by the `figures/` scripts |
 | 9 | `src/evaluate.py` | Evaluation metrics (mIoU, edge F1, edge-type accuracy, GED) |
-| 10 | `src/build_corrected_gt.py`, `src/step3_resplan_mismatch.py`, `src/step4_rescore_newM2.py` | Reproduce the geometry-based ground truth, the ResPlan reliability audit, and the re-scored results |
+| 10 | `src/build_corrected_gt.py`, `src/step3_resplan_mismatch.py`, `src/step4_rescore_newM2.py` | Reproduce the geometry-derived reference, the ResPlan reliability audit, and the re-scored results |
 | 9 | `src/inference.py` | Batch evaluation on test set with GT comparison |
 | 10 | `src/generate_bubble.py` | End-to-end: image → typed bubble diagram. Uses `render_bubble` (the pipeline the paper reports) by default; `--legacy` selects the pre-rework dilation-based M2, weighted proximity matrix and force-directed rendering |
 | 11 | `src/run_ablation.py` | Automated 6-variant ablation study |
@@ -173,7 +173,7 @@ The typed graph uses three categorical edge types. There are no edge weights: ev
 | `open passage` | Two rooms meeting through a gap in the wall, with no door |
 | `shared-wall` | Two rooms separated by a continuous wall, with no opening |
 
-These are read from raster geometry by `src/truegraph_builder.py` (`build_true_graph`). "Open passage" replaces the earlier `arch` category: ResPlan's own graph has no interior-room instance of its `arch`/`direct` relation (all 16,964 `direct` edges in the release connect a room to the building's front-door node, never two interior rooms), so `arch` has no evaluable ground truth in this dataset. The geometry-based ground truth is built by the same `build_true_graph` procedure applied to the ground-truth mask; `src/build_gt_graph.py` (which reads ResPlan's own released graph) is retained only for the dataset-reliability audit of the paper, not as the ground truth.
+These are read from raster geometry by `src/truegraph_builder.py` (`build_true_graph`). "Open passage" replaces the earlier `arch` category: ResPlan's own graph has no interior-room instance of its `arch`/`direct` relation (all 16,964 `direct` edges in the release connect a room to the building's front-door node, never two interior rooms), so `arch` has no evaluable ground truth in this dataset. The geometry-derived reference is built by the same `build_true_graph` procedure applied to the ground-truth mask; `src/build_gt_graph.py` (which reads ResPlan's own released graph) is retained only for the dataset-reliability audit of the paper, not as the ground truth.
 
 ## Results
 
@@ -190,16 +190,16 @@ Parameter counts are exact: 47,236,304 (SegFormer-B3) and 59,452,560 (DeepLabV3+
 
 ### Ablation Results
 
-Ablation of the three geometry-based M2 rules, each disabled in turn, scored against the geometry-based ground truth over an 800-plan sample (`figures/fig4_ablation.py`, matching paper Table 7 / Fig 4):
+Ablation of the three geometry-based M2 rules, each disabled in turn, scored against the geometry-derived reference over an 800-plan sample (`figures/fig4_ablation.py`, matching paper Table 6 / Fig 4):
 
-| Variant (disables one rule) | Effect vs geometry-based ground truth |
+| Variant (disables one rule) | Effect vs geometry-derived reference |
 |---|---|
 | Full pipeline | Edge F1 1.00, edge-type accuracy 1.00 |
 | w/o door precedence | edge-type accuracy drops to 0.61, door recall to 0.26 |
 | w/o open-passage detection | open-passage recall drops to 0.00 |
 | w/o multi-room hub | door recall drops to 0.97 |
 
-Door precedence is the dominant rule: without it, a door adjacent to several rooms is no longer resolved to the correct pair, and both typing accuracy and door recall collapse. The full per-variant numbers are in paper Table 7.
+Door precedence is the dominant rule: without it, a door adjacent to several rooms is no longer resolved to the correct pair, and both typing accuracy and door recall collapse. The full per-variant numbers are in paper Table 6.
 
 ### Paper Figures
 
@@ -210,10 +210,10 @@ All figures are generated by the Python scripts below and saved as vector PDFs w
 | Fig 1 | `figures/fig1_pipeline.py` | Pipeline overview: raster input, predicted label map, typed adjacency matrix, typed bubble diagram |
 | Fig 2 | `figures/fig_training.py` | Training vs validation loss curve (from `history_segformer.json`) |
 | Fig 3 | `figures/fig_training.py` | Training vs validation mIoU curve (from `history_segformer.json`) |
-| Fig 4 | `figures/fig4_ablation.py` | Ablation bar chart (new-rules M2, scored vs geometry-based ground truth) |
+| Fig 4 | `figures/fig4_ablation.py` | Ablation bar chart (new-rules M2, scored vs geometry-derived reference) |
 | Fig 5 | `figures/fig5_tables.py` | The two tabular views of one typed graph: proximity chart (a) and typed adjacency matrix (b), plan 13388 |
 | Fig 6 | `figures/fig6_combined.py` | Qualitative: raster + typed bubble diagram for sample plans |
-| Fig 7 | `figures/fig7_mismatch.py` | ResPlan reliability: geometry-based ground truth vs ResPlan's released graph |
+| Fig 7 | `figures/fig7_mismatch.py` | ResPlan reliability: geometry-derived reference vs ResPlan's released graph |
 
 ```bash
 # generate figures (run from the repo root; Fig 2/3 need no GPU)
@@ -247,7 +247,7 @@ floorplan-bubble-diagram/
 │   ├── evaluate.py
 │   ├── inference.py
 │   ├── generate_bubble.py
-│   ├── build_corrected_gt.py       # build the geometry-based ground truth
+│   ├── build_corrected_gt.py       # build the geometry-derived reference
 │   ├── step3_resplan_mismatch.py   # ResPlan reliability audit
 │   ├── step4_rescore_newM2.py      # re-score the pipeline vs geometry-based GT
 │   ├── step4_confusion.py
@@ -289,7 +289,7 @@ Scoring the pipeline exposed a defect in the dataset. ResPlan distributes a prec
 graph, but auditing it against the rasters over all 17,107 plans shows it types about 40% of the interior
 doors in its own vector geometry as shared-wall, and provides no interior-room instance of its `arch` class.
 A pipeline scored against that annotation is charged for the annotation's errors (Edge F1 0.51). The paper
-therefore builds a geometry-based ground truth directly from the raster with `src/truegraph_builder.py`
+therefore builds a geometry-derived reference directly from the raster with `src/truegraph_builder.py`
 (`build_true_graph`), validated against an architect's reading. Against it the same pipeline recovers doors
 (recall 1.0) and topology (Edge F1 0.93), and the deterministic geometric construction reproduces the graph
 end-to-end at Edge F1 0.998 - a robustness check, since the rules define the reference. The reliability

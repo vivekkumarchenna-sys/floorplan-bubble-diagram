@@ -76,7 +76,7 @@ def classreset_edges(G):
     for every class (Bathroom[0], Bathroom[1], ... regardless of how many
     bedrooms precede them in node-iteration order).
 
-    This is NOT the convention the manuscript documents or that Table 6 was
+    This is NOT the convention the manuscript documents or that Table 5 was
     produced with (see Appendix D.3's own definition: "instance ids follow
     iteration order over classes and connected components" - i.e. a single
     global counter, never reset - which is what ``evaluate._extract_edges``
@@ -291,11 +291,11 @@ def main():
                   f"{d[f'{mtag}_{atag}_f1'].mean():>9.4f}"
                   f"{d[f'{mtag}_{atag}_type'].mean():>10.4f}")
     print("-" * 78)
-    print("\nFor the manuscript (NOTE: the authoritative canonical-id row for Table 6")
+    print("\nFor the manuscript (NOTE: the authoritative canonical-id row for Table 5")
     print("  comes from evaluate.edge_metrics via inference.py, NOT from this script's")
     print("  'classreset' columns above - those are a distinct, non-canonical variant,")
     print("  see classreset_edges()'s docstring):")
-    print(f"  Table 6, NEW row - pipeline under id-independent matching:")
+    print(f"  Table 5, NEW row - pipeline under id-independent matching:")
     print(f"      {d['free_a30_prec'].mean():.4f} / {d['free_a30_rec'].mean():.4f} / "
           f"{d['free_a30_f1'].mean():.4f} / {d['free_a30_type'].mean():.4f}")
     print(f"  Threshold-sweep row (arch_min=6) - id-independent matching:")
