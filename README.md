@@ -57,6 +57,11 @@ Floor Plan Image  →  Semantic Segmentation  →  Room Graph  →  Bubble Diagr
 pip install -r requirements.txt
 ```
 
+`albumentations==1.3.1` is pinned exactly and must stay pinned. `dataset.py` uses
+`RandomResizedCrop` with an area scale of `(0.64, 1.44)`; values above 1.0 are accepted at 1.3.1
+but rejected from 1.4 onward, so a newer release raises a validation error instead of reproducing
+the paper's augmentation. Everything else in `requirements.txt` is a minimum version.
+
 ### Data
 
 This project uses the [ResPlan dataset](https://github.com/ResPlanProject), rasterised residential floor plans with per-pixel semantic labels. See [`data/README.md`](data/README.md) for setup instructions.
