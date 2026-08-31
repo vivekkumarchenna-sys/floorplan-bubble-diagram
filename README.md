@@ -191,8 +191,21 @@ Both models are compared on the same metric - **validation macro mIoU** (mean ov
 |--------|-----------|------------------|-----------|
 | SegFormer-B3 | 47.2 | 0.9651 | ~3 (A100) |
 | DeepLabV3+ (R101) | 59.3 | 0.9684 | ~5.4 (A100) |
+| SegFormer-B0 | 3.7 | 0.9602 | ~3.1 (RTX 5060 laptop) |
 
 Parameter counts are trainable parameters, measured from the released checkpoints: 47,234,768 (SegFormer-B3) and 59,343,024 (DeepLabV3+ R101). Batch-normalisation running statistics are buffers, not parameters, and are excluded; counting them instead gives 47,236,304 and 59,452,560. An earlier version of this table quoted SegFormer's *test per-image* mIoU (0.9974) against DeepLab's *validation macro* mIoU - not the same metric - and listed FLOPs / inference-time figures that are not measured anywhere in this repository.
+
+### Lighter backbone
+
+SegFormer-B0 is 12.7x smaller than B3 and segments measurably worse, but recovers the same graph
+(`src/eval_backbone.py`, full 2,567-plan test split, M2 vs the geometry-derived reference):
+
+| Backbone | Trainable params | Test per-image mIoU | Edge F1 | Edge-type acc |
+|---|---|---|---|---|
+| SegFormer-B3 | 47,234,768 | 0.9974 | 0.9977 | 0.9997 |
+| SegFormer-B0 | 3,718,256 | 0.9928 | 0.9971 | 0.9996 |
+
+Segmentation accuracy is not the limiting factor on these plans.
 
 ### Ablation Results
 

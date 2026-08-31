@@ -68,3 +68,29 @@ as shared-wall. Architect-confirmed.
 - 3 edge types: **door / open passage / shared-wall** (arch removed).
 - Two categorical outputs: bubble diagram (geographic, raster colours) + typed adjacency matrix.
 - No edge weights, no weighted proximity matrix, **no Frobenius metric**.
+
+## Lighter-backbone baseline - SegFormer-B0 (added 2026-08-31)
+
+Trained under the identical protocol (same fixed splits, 512x512, augmentation,
+CE + 0.5*Dice, AdamW + cosine, seed 42, batch 8, 27-epoch budget) on an RTX 5060
+laptop GPU. 3.10 h wall-clock; best val mIoU **0.9602** at epoch 18.
+
+Evaluated on the full 2,567-plan test split with `src/eval_backbone.py`
+(M2 on predicted masks vs the geometry-derived reference, as Table 5 row 3):
+
+| Backbone | Trainable params | Test per-image mIoU | Edge F1 | Type acc | door / open / shared |
+|---|---|---|---|---|---|
+| SegFormer-B3 | 47,234,768 | 0.9974 | 0.9977 | 0.9997 | 0.999 / 0.982 / 0.993 |
+| SegFormer-B0 | 3,718,256  | 0.9928 | 0.9971 | 0.9996 | 0.999 / 0.984 / 0.990 |
+
+**A 12.7x smaller encoder with ~3x the per-pixel error recovers the same typed
+graph.** This is the most direct evidence that segmentation accuracy is not the
+limiting factor on these plans (paper Appendix B.4, Table B.3; cited in 7.1, 7.3).
+
+Validation of the scorer: run against the released B3 checkpoint on 120 test
+plans it gives mIoU 0.9976 and Edge F1 0.9972, reproducing the full-split 0.9974
+and 0.9977 within sampling noise.
+
+Parameter counts above are trainable parameters. Counting batch-norm running
+statistics as parameters (as an earlier version of the paper did) gives
+47,236,304 / 59,452,560 / 3,718,768.
