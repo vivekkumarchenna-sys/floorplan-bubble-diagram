@@ -21,6 +21,7 @@ Floor Plan Image  →  Semantic Segmentation  →  Room Graph  →  Bubble Diagr
 | 8 | `src/visualize.py` | Bubble diagram visualisation; geographic bubble diagrams (rooms at their plan positions) are rendered by the `figures/` scripts |
 | 9 | `src/evaluate.py` | Evaluation metrics (mIoU, edge F1, edge-type accuracy, GED) |
 | 10 | `src/build_corrected_gt.py`, `src/step3_resplan_mismatch.py`, `src/step4_rescore_newM2.py` | Reproduce the geometry-derived reference, the ResPlan reliability audit, and the re-scored results |
+| 10b | `src/rescore_table5.py` | Rows 2 and 3 of paper Table 5 in one pass (dilation-based and geometric M2 on predicted masks vs the geometry-derived reference), with precision and recall retained |
 | 9 | `src/inference.py` | Batch evaluation on test set with GT comparison |
 | 10 | `src/generate_bubble.py` | End-to-end: image → typed bubble diagram. Uses `render_bubble` (the pipeline the paper reports) by default; `--legacy` selects the pre-rework dilation-based M2, weighted proximity matrix and force-directed rendering |
 | 11 | `src/run_ablation.py` | Automated 6-variant ablation study |
@@ -311,7 +312,7 @@ doors in its own vector geometry as shared-wall, and provides no interior-room i
 A pipeline scored against that annotation is charged for the annotation's errors (Edge F1 0.51). The paper
 therefore builds a geometry-derived reference directly from the raster with `src/truegraph_builder.py`
 (`build_true_graph`), validated against an architect's reading. Against it the same pipeline recovers doors
-(recall 1.0) and topology (Edge F1 0.93), and the deterministic geometric construction reproduces the graph
+(recall 1.0) and topology (Edge F1 0.95), and the deterministic geometric construction reproduces the graph
 end-to-end at Edge F1 0.998 - a robustness check, since the rules define the reference. The reliability
 audit and the re-scoring are reproduced by `src/build_corrected_gt.py`, `src/step3_resplan_mismatch.py`
 and `src/step4_rescore_newM2.py`; `RESULTS_SUMMARY.md` documents every reported number.

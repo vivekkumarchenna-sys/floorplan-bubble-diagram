@@ -1,5 +1,7 @@
 # Google Form user study (typed bubble-diagram evaluation)
 
+> **Scope note.** This folder holds the instrument for a planned follow-up perceived-quality study (one plan per participant, 100 plans). It is **not** the study reported in the paper. The user study reported in Section 6.8 and Appendix E (20 raters, 20 stimuli, paired Wilcoxon analysis) is reproduced by `src/user_study_stats.py` from `User_Studies/original_pilot_study/user_study_workbook_latest.xlsx` in the Zenodo archive.
+
 Each student rates **one floor plan**: they see three paired images (the floor
 plan beside the proximity matrix, the proximity chart, and the bubble diagram)
 and rate content correctness, per-output readability, an overall score and a

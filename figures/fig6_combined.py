@@ -14,7 +14,7 @@ scale_all = json.load(open("pixel_scale.json"))
 
 def disp(s): return re.sub(r"([A-Za-z])(\d)$", r"\1 \2", s)
 
-fig, axes = plt.subplots(len(STEMS), 2, figsize=(13.2, 4.3 * len(STEMS)),
+fig, axes = plt.subplots(len(STEMS), 2, figsize=(9.4, 3.9 * len(STEMS)),
                          gridspec_kw={"width_ratios": [1.2, 1.2]})
 for row, stem in enumerate(STEMS):
     mask = cv2.imread(f"data/resplan_masks/{stem}_mask.png", 0).astype(np.int64)
@@ -44,7 +44,7 @@ for row, stem in enumerate(STEMS):
         else: axR.plot(x, y, color="#9E9E9E", lw=2.2, ls=(0, (1, 3)), zorder=1)
     cx0 = np.mean([p[0] for p in pos.values()]); cy0 = np.mean([p[1] for p in pos.values()])
     for i in R:
-        s = 300 + 2200*(area[i]/amax)
+        s = 260 + 1900*(area[i]/amax)
         axR.scatter([pos[i][0]], [pos[i][1]], s=s, c=[col[i]], edgecolors="#333", linewidths=1.5, zorder=3)
         lbl = f"{disp(nm[i])}\n{area[i]:.1f} m²" if scale else disp(nm[i])
         dx = pos[i][0]-cx0; dy = pos[i][1]-cy0; n = (dx*dx+dy*dy)**0.5 or 1
@@ -52,7 +52,7 @@ for row, stem in enumerate(STEMS):
         ha = "left" if ux > 0.35 else ("right" if ux < -0.35 else "center")
         va = "bottom" if uy > 0.35 else ("top" if uy < -0.35 else "center")
         axR.annotate(lbl, pos[i], xytext=(off*ux, off*uy), textcoords="offset points", ha=ha, va=va,
-                     fontsize=8, fontweight="bold",
+                     fontsize=9, fontweight="bold",
                      bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="#bbb", lw=0.5, alpha=0.92), zorder=5)
     axR.set_title(f"Plan {stem} - typed bubble diagram", fontsize=12, fontweight="bold", pad=14)
     axR.axis("off"); axR.margins(0.30)

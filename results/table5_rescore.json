@@ -1,0 +1,75 @@
+{
+  "n_plans": 2567,
+  "row2_pred": {
+    "edge_precision_mean": 0.9047866719268951,
+    "edge_precision_sd": 0.09783421933738547,
+    "edge_recall_mean": 0.9981621485826441,
+    "edge_recall_sd": 0.020038361584002733,
+    "edge_f1_mean": 0.9462298513660289,
+    "edge_f1_sd": 0.058824560394034615,
+    "type_acc_mean": 0.694295680448267,
+    "type_acc_sd": 0.10697477605707753,
+    "pooled_precision": 0.8895017577888229,
+    "pooled_recall": 0.9980956267428416,
+    "pooled_type_acc": 0.7005792163543442,
+    "per_type_recall": {
+      "door": 0.9997432605905007,
+      "open": 0.0,
+      "shared-wall": 0.43224967490247074
+    },
+    "per_type_support": {
+      "door": 15580,
+      "open": 2291,
+      "shared-wall": 11535
+    },
+    "unmatched_share": 0.0019043732571584204
+  },
+  "row2_gtmask": {
+    "edge_precision_mean": 0.9043104940666917,
+    "edge_precision_sd": 0.09819455899735245,
+    "edge_recall_mean": 1.0,
+    "edge_recall_sd": 0.0,
+    "edge_f1_mean": 0.9467874853044869,
+    "edge_f1_sd": 0.057673326872421424,
+    "type_acc_mean": 0.6941789265984839,
+    "type_acc_sd": 0.10738382612711092,
+    "pooled_precision": 0.8886672710788758,
+    "pooled_recall": 1.0,
+    "pooled_type_acc": 0.7002992586546963,
+    "per_type_recall": {
+      "door": 1.0,
+      "open": 0.0,
+      "shared-wall": 0.4345903771131339
+    },
+    "per_type_support": {
+      "door": 15580,
+      "open": 2291,
+      "shared-wall": 11535
+    },
+    "unmatched_share": 0.0
+  },
+  "row3_pred": {
+    "edge_precision_mean": 0.9995992363105585,
+    "edge_precision_sd": 0.006089363781099479,
+    "edge_recall_mean": 0.9961412672520922,
+    "edge_recall_sd": 0.02473969401576628,
+    "edge_f1_mean": 0.9976876489379555,
+    "edge_f1_sd": 0.01496878165041686,
+    "type_acc_mean": 0.9996714045209114,
+    "type_acc_sd": 0.00548717980899428,
+    "pooled_precision": 0.9995220538030861,
+    "pooled_recall": 0.9956471468407808,
+    "pooled_type_acc": 0.9996242912767266,
+    "per_type_recall": {
+      "door": 0.9992939666238768,
+      "open": 0.9816673941510258,
+      "shared-wall": 0.9925444299956654
+    },
+    "per_type_support": {
+      "door": 15580,
+      "open": 2291,
+      "shared-wall": 11535
+    },
+    "unmatched_share": 0.004352853159219183
+  }
+}

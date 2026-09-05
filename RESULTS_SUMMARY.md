@@ -42,7 +42,7 @@ Corrected-GT edges matched to ResPlan's own graph by class + area-rank
 | Scoring | Edge F1 | type acc | door recall | shared-wall recall |
 |---|---|---|---|---|
 | OLD M2 (dilation) vs **ResPlan** GT (the paper's numbers) | 0.5096 | 0.6302 | 0.999 | 0.143 |
-| OLD M2 (dilation) vs **corrected** GT (n=2,567) | 0.9325 | 0.7385 | 1.0000 | 0.4514 |
+| OLD M2 (dilation) vs **corrected** GT, PREDICTED masks (n=2,567; see "Table 5 row 2 restated" below) | 0.9462 | 0.6943 | 0.9997 | 0.4322 |
 | **NEW M2 (build_true_graph) end-to-end on PREDICTED masks vs corrected GT** | **0.9977** | **0.9997** | **0.9993** | **0.9925** |
 
 STEP-4 full result (n=2,567 test plans, SegFormer predicted masks → build_true_graph, vs corrected GT):
@@ -53,8 +53,8 @@ because segmentation is ~0.997 mIoU the graph is reproduced almost exactly, so *
 the end-to-end pipeline delivers the specified typed diagram. (This number measures segmentation robustness of the
 deterministic rules, NOT independent validation of the rules - that comes from the architect check + 60-plan sweep.)
 
-- The jump from 0.51 → 0.93 Edge F1 on the *same pipeline* is almost entirely the GT fix.
-- Residual under OLD M2: shared-wall recall 0.4514 - a *genuine* limitation (it over-types
+- The jump from 0.51 → 0.95 Edge F1 on the *same pipeline* is almost entirely the GT fix.
+- Residual under OLD M2: shared-wall recall 0.43 (and open recall 0, since it has no open category) - a *genuine* limitation (it over-types
   shared-walls that sit next to a doorway), separate from the GT problem.
 - NEW M2 on predicted masks isolates segmentation-only error (seg mIoU ~0.997) → near-perfect
   end-to-end reproduction of the corrected GT (10-plan spot check: 10/10 plans exact).
@@ -94,3 +94,24 @@ and 0.9977 within sampling noise.
 Parameter counts above are trainable parameters. Counting batch-norm running
 statistics as parameters (as an earlier version of the paper did) gives
 47,236,304 / 59,452,560 / 3,718,768.
+
+## Table 5 row 2 restated (added 2026-09-05)
+
+The row-2 figures originally recorded above (0.9325 / 0.7385 / 1.0000 / 0.4514, from
+`CORRECTED_GT_METHOD/rescore_result_OLD_M2_vs_corrected_GT.txt`, 2026-07-28) were computed
+(a) on ground-truth masks, not predicted masks, and (b) against an earlier build of the
+reference that had no open-passage category (5.91 door + 5.25 shared-wall edges/plan). Every
+other table in the paper uses the current reference (6.07 door / 0.89 open / 4.49 shared-wall
+edges per plan on the test split). Row 2 was therefore recomputed with
+`src/rescore_table5.py` (one SegFormer-B3 pass per test plan; released defaults, including
+`door_dilation_px=12`, which also reproduces `per_image.csv` plan for plan):
+
+| Condition (predicted masks, n=2,567) | P | R | Edge F1 | type acc | door / open / shared |
+|---|---|---|---|---|---|
+| dilation-based M2 vs geometry-derived reference (row 2) | 0.9048 | 0.9982 | **0.9462** | **0.6943** | 0.9997 / 0.000 / 0.4322 |
+| geometric M2 vs geometry-derived reference (row 3) | 0.9996 | 0.9961 | 0.9977 | 0.9997 | 0.9993 / 0.9817 / 0.9925 |
+
+Row 3 reproduces the STEP-4 result exactly. The open recall of 0 in row 2 is structural: the
+dilation-based M2 has no open-passage type, so every open edge of the reference counts as a
+typing error against it. Means are per plan; pooled precision/recall are 0.8895/0.9981 (row 2)
+and 0.9995/0.9956 (row 3). Per-plan values: `results/table5_rescore.csv` from the script.

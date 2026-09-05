@@ -11,7 +11,9 @@ checkpoints/*
 *.pth
 
 # Output / results
-results/
+results/*
+!results/table5_rescore.csv
+!results/table5_rescore.json
 
 # Python
 __pycache__/

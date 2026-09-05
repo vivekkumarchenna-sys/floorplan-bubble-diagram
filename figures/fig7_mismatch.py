@@ -1,8 +1,8 @@
 # -*- coding: utf-8 -*-
-"""Fig 7: annotation mismatch on plan 16649. Corrected GT | ResPlan | Pipeline.
+"""Fig 7: annotation mismatch on plan 16649. Geometry-derived reference | ResPlan.
 Each panel draws edges in the STYLE of the type that graph assigns (door=solid,
 open=thick purple, shared-wall=dotted, absent=no line); an edge is RED when its
-type disagrees with the corrected GT. Labels sit outside the bubbles."""
+type disagrees with the geometry-derived reference. Labels sit outside the bubbles."""
 import sys; sys.path.insert(0, "src")
 import cv2, numpy as np, json, torch, re
 import matplotlib; matplotlib.use("Agg")
@@ -118,24 +118,24 @@ def draw(ax, edges, title, ref=None, marks=False):
         ha = "left" if ux > 0.35 else ("right" if ux < -0.35 else "center")
         va = "bottom" if uy > 0.35 else ("top" if uy < -0.35 else "center")
         ax.annotate(lbl, pos[i], xytext=(off * ux, off * uy), textcoords="offset points",
-                    ha=ha, va=va, fontsize=8.5, fontweight="bold",
+                    ha=ha, va=va, fontsize=9, fontweight="bold",
                     bbox=dict(boxstyle="round,pad=0.2", fc="white", ec="#ccc", lw=0.5, alpha=0.92), zorder=5)
     ax.set_title(title, fontsize=12.5, fontweight="bold", pad=12); ax.axis("off"); ax.margins(0.32)
 
-# pipeline reproduces the corrected GT exactly on this plan (Edge F1 0.998 dataset-wide),
-# so a separate pipeline panel would duplicate the corrected-GT panel. Two panels only.
-assert G3 == G1, "pipeline != corrected GT on 16649 - restore 3rd panel"
-fig, axes = plt.subplots(1, 2, figsize=(10.2, 4.9))
-draw(axes[0], G1, "Geometry-based ground truth")
+# pipeline reproduces the geometry-derived reference exactly on this plan (Edge F1 0.998 dataset-wide),
+# so a separate pipeline panel would duplicate the reference panel. Two panels only.
+assert G3 == G1, "pipeline != geometry-derived reference on 16649 - restore 3rd panel"
+fig, axes = plt.subplots(1, 2, figsize=(8.8, 4.6))
+draw(axes[0], G1, "Geometry-derived reference")
 draw(axes[1], G2, "ResPlan released graph", ref=G1, marks=True)
 h = [mlines.Line2D([], [], color="#111", lw=2.8, label="door"),
      mlines.Line2D([], [], color="#8E24AA", lw=5.0, label="open passage"),
      mlines.Line2D([], [], color="#9E9E9E", lw=2.4, ls=(0, (1, 3)), label="shared wall"),
      mlines.Line2D([], [], color="#E57373", lw=2.0, label="missing connection (absent in ResPlan)"),
      mlines.Line2D([], [], marker="X", color="w", markerfacecolor="#D32F2F", markersize=12,
-                   label="wrong / missing vs ground truth")]
-fig.legend(handles=h, loc="lower center", ncol=4, fontsize=11, frameon=True, bbox_to_anchor=(0.5, 0.02))
-fig.suptitle("Plan 16649 - ResPlan types three real Living-room doors as shared walls (✗); the pipeline recovers them",
-             fontsize=13.5, fontweight="bold")
-fig.tight_layout(rect=[0, 0.15, 1, 0.94])
+                   label="wrong / missing vs the reference")]
+fig.legend(handles=h, loc="lower center", ncol=3, fontsize=10, frameon=True, bbox_to_anchor=(0.5, 0.01))
+fig.suptitle("Plan 16649: ResPlan types three living-room doors as shared walls (✗)",
+             fontsize=12.5, fontweight="bold")
+fig.tight_layout(rect=[0, 0.16, 1, 0.94])
 fig.savefig(sys.argv[1], dpi=150, bbox_inches="tight"); print("saved", sys.argv[1])
